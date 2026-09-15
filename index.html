@@ -191,6 +191,21 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
 #modal-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 14px; }
 
 /* misc */
+html.light {
+  --bg: #F5F3FA; --surface: #FFFFFF; --surface-v: #EDEAF5;
+  --primary: #7C4DFF; --primary-dark: #5E35B1;
+  --text: #1C1A23; --text2: #6E6A7A; --divider: #E3E0EC;
+}
+html.light #player { background: linear-gradient(160deg, #EFEAFA 0%, #F5F3FA 55%); }
+html.light .p-art { box-shadow: 0 18px 50px rgba(124,77,255,.18); }
+html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primary-dark); }
+#drop-overlay {
+  position: fixed; inset: 0; z-index: 50; display: none;
+  align-items: center; justify-content: center; text-align: center;
+  background: rgba(124,77,255,.22); border: 3px dashed var(--primary);
+  color: #fff; font-size: 18px; font-weight: 600; pointer-events: none;
+}
+#drop-overlay.show { display: flex; }
 .hidden { display: none !important; }
 .toast {
   position: fixed; z-index: 40; bottom: 96px; left: 50%; transform: translateX(-50%);
@@ -298,6 +313,7 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
   <div id="modal"></div>
 </div>
 <div class="toast" id="toast"></div>
+<div id="drop-overlay">Solte os arquivos de áudio/vídeo aqui</div>
 
 <input type="file" id="fileSongs" multiple accept="audio/*" class="hidden">
 <input type="file" id="fileVideos" multiple accept="video/*" class="hidden">
@@ -313,7 +329,7 @@ const state = {
   songs: [], videos: [], playlists: [],
   tab: 'songs', detail: null, // {type:'album'|'artist'|'playlist', ...}
   queue: [], queueIndex: -1, current: null,
-  shuffle: false, repeat: 0, favs: new Set(), nick: '',
+  shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark',
   djMode: false, djVoice: true, djMic: false, learn: {},
   radioActive: null, radioStatus: 'stopped',
   db: null
@@ -516,9 +532,18 @@ function durationOf(file, isVideo) {
 
 // ---------- Importação ----------
 async function importFiles(fileList, kind) {
+  const existing = new Set();
+  const seeds = kind === 'song' ? state.songs : state.videos;
+  for (const it of seeds) {
+    const b = it.blob || {};
+    existing.add((b.lastModified || it.createdAt || 0) + '|' + (b.size || it.sizeBytes || 0) + '|' + it.name);
+  }
+  let added = 0, skipped = 0;
   toast(`Importando ${fileList.length} arquivos…`);
-  let added = 0;
   for (const file of fileList) {
+    const key = (file.lastModified || 0) + '|' + file.size + '|' + file.name;
+    if (existing.has(key)) { skipped++; continue; }
+    existing.add(key);
     try {
       if (kind === 'song') {
         const meta = await metadataOf(file);
@@ -543,7 +568,7 @@ async function importFiles(fileList, kind) {
     } catch (e) { console.warn('falha ao importar', file.name, e); }
   }
   await reloadAll();
-  toast(`Importadas ${added} ${kind === 'song' ? 'músicas' : 'vídeos'}.`);
+  toast(`Importadas ${added} ${kind === 'song' ? 'músicas' : 'vídeos'}${skipped ? ` (${skipped} duplicada${skipped === 1 ? '' : 's'} ignorada${skipped === 1 ? '' : 's'})` : ''}.`);
   if (added && kind === 'song') buildAlbums();
 }
 function putSong(s) { return new Promise((res, rej) => { const r = tx('songs', 'readwrite').put(s); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
@@ -1353,6 +1378,7 @@ function showProfile() {
   const list = $('modal');
   list.innerHTML = `<h3>Perfil</h3>
     <div class="mrow">Nickname: <input type="text" id="nick-in" value="${esc(state.nick)}" style="width:auto"></div>
+    <div class="mrow" onclick="toggleTheme()"><span class="art grad-c">◐</span><div class="mid"><div class="it-title">Tema</div><div class="it-sub">Claro / Escuro</div></div><span id="theme-ic" style="color:var(--primary);font-size:18px">${state.theme === 'light' ? '🌙' : '☀️'}</span></div>
     <div class="mrow" id="apk-row" onclick="downloadApk()" style="margin-top:6px"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">Pulsa para Android</div><div class="it-sub" id="apk-ver">Verificando…</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button><button class="btn" onclick="saveNick()">Salvar</button></div>`;
   $('modal-wrap').classList.add('show');
@@ -1369,6 +1395,13 @@ async function loadApkInfo() {
 function downloadApk() {
   if (!APK_INFO.url) { toast('URL do APK indisponível.'); return; }
   window.location.href = APK_INFO.url;
+}
+function applyTheme() { document.documentElement.classList.toggle('light', (state.theme || 'dark') === 'light'); }
+function toggleTheme() {
+  state.theme = state.theme === 'light' ? 'dark' : 'light';
+  applyTheme();
+  putKV('theme', state.theme);
+  const i = $('theme-ic'); if (i) i.textContent = state.theme === 'light' ? '🌙' : '☀️';
 }
 function cycleSpeed() {
   speedIdx = (speedIdx + 1) % SPEEDS.length;
@@ -1460,6 +1493,8 @@ async function init() {
   if (learn) state.learn = learn;
   const nick = await getKV('nick');
   if (nick) { state.nick = nick; $('profile-avatar').textContent = initials(nick); }
+  const theme = await getKV('theme');
+  if (theme) { state.theme = theme; applyTheme(); }
   const idx = await getKV('lastSong');
   if (idx && state.songs.length) {
     state.queue = state.songs;
@@ -1480,6 +1515,20 @@ function registerTabs() {
   $('search').oninput = () => { searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
   $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; radioAudio.volume = v; };
   $('p-speed').onclick = cycleSpeed;
+  let dragDepth = 0;
+  document.addEventListener('dragenter', (e) => { e.preventDefault(); dragDepth++; $('drop-overlay').classList.add('show'); });
+  document.addEventListener('dragleave', (e) => { e.preventDefault(); if (--dragDepth <= 0) { dragDepth = 0; $('drop-overlay').classList.remove('show'); } });
+  document.addEventListener('dragover', (e) => e.preventDefault());
+  document.addEventListener('drop', async (e) => {
+    e.preventDefault(); dragDepth = 0; $('drop-overlay').classList.remove('show');
+    const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+    if (!files.length) return;
+    const songs = files.filter((f) => /\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(f.name));
+    const vids = files.filter((f) => /\.(mp4|mkv|webm|mov|avi)$/i.test(f.name));
+    if (songs.length) await importFiles(songs, 'song');
+    if (vids.length) await importFiles(vids, 'video');
+    if (!songs.length && !vids.length) toast('Arraste arquivos de áudio/vídeo');
+  });
   // Bus topology: um único botão de importação flutuante
   createFab();
 }
