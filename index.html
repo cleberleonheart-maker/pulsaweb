@@ -1076,6 +1076,7 @@ function djCommand(raw) {
   const hasWake = /virgin|virgem|virgene|vargin/.test(norm);
   const action = /mix|mistura|mixa/.test(norm) ? 'mix'
     : /odia|odeio|nao gostei|nao curti/.test(norm) ? 'dislike'
+    : /duplicad|repetid/.test(norm) ? 'dupes'
     : /pula|pular|pule|skip/.test(norm) ? 'skip'
     : /proxima|passa|avanc/.test(norm) ? 'next'
     : /anterior|volta|volt/.test(norm) ? 'prev'
@@ -1095,6 +1096,9 @@ function djCommand(raw) {
       djMarkDislike();
       djSpeak('Entendido! Não vou tocar essa por um tempo.');
       if (state.queue.length) next();
+      break;
+    case 'dupes':
+      removeDuplicates();
       break;
     case 'skip':
       djMarkSkip();
@@ -1485,6 +1489,88 @@ async function checkNovidades() {
   } catch (e) { toast('Sem conexão com o GitHub'); }
 }
 
+// ---------- Duplicadas ----------
+function dupKey(s) {
+  const t = String(s.title || s.name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const a = String(s.artist || '').trim().toLowerCase();
+  return (t || '?') + '|' + a;
+}
+function findDuplicates() {
+  const groups = new Map();
+  for (const s of state.songs) {
+    const k = dupKey(s);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(s);
+  }
+  return [...groups.values()].filter((g) => g.length > 1);
+}
+async function removeDuplicates() {
+  const groups = findDuplicates();
+  const extras = groups.reduce((acc, g) => acc.concat(g.slice(1)), []);
+  if (!extras.length) {
+    djSpeak('Não encontrei músicas duplicadas. Tudo certo!');
+    toast('Nenhuma duplicada encontrada 😊');
+    return;
+  }
+  const list = $('modal');
+  list.innerHTML = `<h3>Duplicadas (${extras.length})</h3>
+    <div class="list" style="max-height:50vh;overflow-y:auto;padding:0">` +
+    groups.map((g) => `<div class="section" style="padding:10px 8px 4px">${esc(g[0].title || g[0].name)} — ${esc(g[0].artist || '')}</div>` +
+      g.slice(1).map((s) => `<div class="mrow" style="color:var(--text2)">🗑 ${esc(s.title || s.name)}</div>`).join('')).join('') +
+    `</div>
+    <div id="modal-actions">
+      <button class="btn secondary" onclick="closeModal()">Cancelar</button>
+      <button class="btn secondary" onclick="confirmByVoice()">🎙 Confirmar por voz</button>
+      <button class="btn" onclick="deleteDupes()">Remover ${extras.length}</button>
+    </div>`;
+  $('modal-wrap').classList.add('show');
+  djSpeak(`Encontrei ${extras.length} músicas duplicadas. Toque em remover, ou confirme por voz dizendo sim.`);
+}
+function confirmByVoice() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { toast('Voz não suportada — toque em "Remover".'); return; }
+  const ids = [];
+  for (const g of findDuplicates()) ids.push(...g.slice(1).map((s) => s.id));
+  if (!ids.length) { toast('Nada a remover'); return; }
+  djSpeak('Quer que eu remova as duplicadas? Diga sim, ou diga não.');
+  const r = new SR();
+  r.lang = 'pt-BR'; r.continuous = false; r.interimResults = false; r.maxAlternatives = 3;
+  let done = false;
+  const finish = () => { done = true; try { r.stop(); } catch (e) {} r.onresult = r.onerror = r.onend = null; };
+  r.onresult = (ev) => {
+    const t = djNorm((ev.results[ev.results.length - 1][0] || {}).transcript || '');
+    if (done) return;
+    if (/^(sim|quero|pode|ok|claro|remove|apaga|confir)/.test(t)) { finish(); djSpeak('Perfeito! Removendo as duplicadas.'); deleteDupes(ids); }
+    else if (/^(nao|cancela)/.test(t)) { finish(); djSpeak('Tudo bem, não removo nada.'); }
+  };
+  r.onerror = () => { if (!done) toast('Não consegui ouvir — toque em "Remover".'); };
+  r.onend = () => { if (!done) { try { r.start(); } catch (e) { finish(); } } };
+  try { r.start(); } catch (e) { toast('Não consegui ouvir — toque em "Remover".'); }
+}
+async function deleteDupes(idsArg) {
+  let ids = idsArg;
+  if (!ids) {
+    ids = [];
+    for (const g of findDuplicates()) ids.push(...g.slice(1).map((s) => s.id));
+  }
+  if (!ids.length) return;
+  closeModal();
+  for (const id of ids) {
+    await delObj('songs', id);
+    state.favs.delete(id);
+    if (state.learn[id]) { delete state.learn[id]; }
+    if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
+    for (const p of state.playlists) {
+      if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
+    }
+  }
+  await putKV('favs', [...state.favs]);
+  if (Object.keys(state.learn).length) await putKV('learn', state.learn);
+  state.queue = state.queue.filter((x) => !ids.includes(x.id));
+  await reloadAll();
+  toast('Duplicadas removidas!');
+}
+
 // ---------- Remoção ----------
 async function delVideo(id) {
   const v = state.videos.find((x) => x.id === id);
@@ -1585,6 +1671,7 @@ function createFab() {
       <div class="mrow" onclick="pickFolder()"><span class="art grad-b">📁</span><div class="mid"><div class="it-title">Pasta inteira</div><div class="it-sub">Chrome/Edge no Windows</div></div></div>
       <div class="mrow" onclick="pickNovidades()"><span class="art grad-b">🔎</span><div class="mid"><div class="it-title">Buscar novidades na pasta</div><div class="it-sub">Reler a pasta e importar só o que é novo</div></div></div>
       <div class="mrow" onclick="checkNovidades()"><span class="art grad-e">✨</span><div class="mid"><div class="it-title">Buscar novidades de versão</div><div class="it-sub">Verifica atualização do app no GitHub</div></div></div>
+      <div class="mrow" onclick="removeDuplicates()"><span class="art grad-a">♻</span><div class="mid"><div class="it-title">Remover músicas duplicadas</div><div class="it-sub">A Virgin encontra e remove repetidas</div></div></div>
       <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
     $('modal-wrap').classList.add('show');
   };
