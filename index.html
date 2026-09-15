@@ -870,7 +870,7 @@ function objUrl(s) {
 }
 
 // ---------- DJ Virgin ----------
-let djEntered = false, djLearnTimer = 0, djLastId = null;
+let djEntered = false, djLearnTimer = 0, djLastId = null, djAnnounced = new Set();
 function djLearnGet(id) { return state.learn[id] || { plays: 0, skips: 0, liked: false }; }
 function djLearnSet(id, patch) {
   state.learn[id] = Object.assign(djLearnGet(id), patch);
@@ -880,6 +880,11 @@ function djLearnSet(id, patch) {
 function djMarkSkip() { if (!state.djMode || !state.current) return; djLearnSet(state.current.id, { skips: djLearnGet(state.current.id).skips + 1 }); }
 function djMarkDislike() { if (!state.current) return; djLearnSet(state.current.id, { skips: djLearnGet(state.current.id).skips + 5, liked: false }); }
 function pjNext() { if (state.djMode) djMarkSkip(); next(); }
+function djExit() {
+  state.djMode = false;
+  if (state.djPrevRepeat !== undefined) { state.repeat = state.djPrevRepeat; state.djPrevRepeat = undefined; }
+  $('p-dj').style.color = 'var(--text)';
+}
 function pickDjVoice(u) {
   const vs = speechSynthesis.getVoices();
   if (!vs.length) return;
@@ -893,9 +898,10 @@ function pickDjVoice(u) {
     vs[0];
   if (pick) { u.voice = pick; u.lang = pick.lang; }
 }
-function djSpeak(text) {
+async function djSpeak(text) {
   if (!state.djVoice || !('speechSynthesis' in window) || !text) return;
   try {
+    await djWaitVoices();
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
     u.pitch = 1.2; u.rate = 0.95;
@@ -903,7 +909,15 @@ function djSpeak(text) {
     speechSynthesis.speak(u);
   } catch (e) {}
 }
-if ('speechSynthesis' in window) speechSynthesis.addEventListener('voiceschanged', () => {});
+function djWaitVoices() {
+  if (!('speechSynthesis' in window) || (speechSynthesis.getVoices && speechSynthesis.getVoices().length)) return Promise.resolve();
+  return new Promise((r) => {
+    let done = false;
+    const fin = () => { if (!done) { done = true; r(); } };
+    speechSynthesis.addEventListener('voiceschanged', fin, { once: true });
+    setTimeout(fin, 1000);
+  });
+}
 function djVoiceToggle() {
   state.djVoice = !state.djVoice;
   $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
@@ -950,10 +964,12 @@ function djMix() {
   stopRadio(true);
   state.djMode = true;
   state.shuffle = false;
+  state.djPrevRepeat = state.repeat;
   state.repeat = 1;
   state.queue = djEngine(pool);
   state.queueIndex = 0;
   djEntered = true;
+  djAnnounced = new Set();
   playCurrent();
   openPlayer();
   $('p-dj').style.color = 'var(--primary)';
@@ -976,7 +992,6 @@ function pjMicToggle() {
     const last = ev.results[ev.results.length - 1];
     const text = (last && last[0] && last[0].transcript || '').trim();
     if (text) djCommand(text.toLowerCase());
-    restart();
   };
   r.onerror = (ev) => {
     if (ev.error === 'no-speech' || ev.error === 'aborted' || ev.error === 'network' || ev.error === 'not-allowed') {
@@ -1006,14 +1021,15 @@ function djCommand(raw) {
     : /pula|pular|pule|skip/.test(norm) ? 'skip'
     : /proxima|passa|avanc/.test(norm) ? 'next'
     : /anterior|volta|volt/.test(norm) ? 'prev'
-    : /pausa|parar|pare|stop/.test(norm) ? 'pause'
+    : /pausa|parar|pare|stop|\bpara (a|o|de|com|por|agora)/.test(norm) ? 'pause'
     : /toca|toque|continua|play|roda/.test(norm) ? 'play'
     : /favorit|curti|gostei|amei/.test(norm) ? 'fav'
     : /qual|essa|tocando|nome/.test(norm) ? 'info'
     : /obrigad|valeu|thanks/.test(norm) ? 'thanks'
     : /oi|ola|hello/.test(norm) ? 'hello'
     : null;
-  if (!action) { if (hasWake) djSpeak('Desculpa, não entendi. Tente: Virgin, próxima música.'); return; }
+  if (!hasWake) return;
+  if (!action) { djSpeak('Desculpa, não entendi. Tente: Virgin, próxima música.'); return; }
   const cur = state.current;
   switch (action) {
     case 'mix': djSpeak('Claro! Preparando um mix novo para você.'); setTimeout(djMix, 1500); break;
@@ -1033,12 +1049,16 @@ function djCommand(raw) {
       if (state.queue.length) next();
       break;
     case 'prev': djSpeak('Voltando!'); prev(); break;
-    case 'pause':
-      if (audio.src && !audio.paused) { audio.pause(); djSpeak('Pausado!'); }
+    case 'pause': {
+      const el2 = state.current && state.current.type === 'video' ? video : audio;
+      if (el2.src && !el2.paused) { el2.pause(); djSpeak('Pausado!'); }
       break;
-    case 'play':
-      if (audio.src && audio.paused) { audio.play(); djSpeak('Tocando de novo!'); }
+    }
+    case 'play': {
+      const el2 = state.current && state.current.type === 'video' ? video : audio;
+      if (el2.src && el2.paused) { el2.play(); djSpeak('Tocando de novo!'); }
       break;
+    }
     case 'fav':
       if (cur) { toggleFav(cur); djSpeak('Marcada como favorita!'); }
       break;
@@ -1053,8 +1073,7 @@ function djCommand(raw) {
 function playList(list, song) {
   if (!song || !list.length) return;
   stopRadio(true);
-  state.djMode = false;
-  $('p-dj').style.color = 'var(--text)';
+  djExit();
   state.queue = list;
   state.queueIndex = list.indexOf(song);
   if (state.queueIndex < 0) { state.queue.unshift(song); state.queueIndex = 0; }
@@ -1063,8 +1082,7 @@ function playList(list, song) {
 }
 function playVideo(v) {
   stopRadio(true);
-  state.djMode = false;
-  $('p-dj').style.color = 'var(--text)';
+  djExit();
   audio.pause();
   if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
   state.current = v;
@@ -1091,7 +1109,8 @@ function playCurrent() {
   audio.play().then(() => updateMediaSession()).catch(() => {});
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
-    if (djEntered) djEntered = false; else djAnnounceTrack(s);
+    if (djEntered) djEntered = false;
+    else if (!djAnnounced.has(s.id)) { djAnnounced.add(s.id); djAnnounceTrack(s); }
   }
   if ('mediaSession' in navigator) {
     navigator.mediaSession.playbackState = 'playing';
@@ -1143,9 +1162,11 @@ function toggleShuffle() {
   state.shuffle = !state.shuffle;
   renderPlayer();
   if (state.shuffle && state.queue.length) {
+    const i = Math.floor(Math.random() * state.queue.length);
     const cur = state.queue[state.queueIndex];
-    state.queueIndex = Math.floor(Math.random() * state.queue.length);
-    state.queue[state.queueIndex] = cur;
+    state.queue[state.queueIndex] = state.queue[i];
+    state.queue[i] = cur;
+    state.queueIndex = i;
   }
 }
 function toggleRepeat() {
