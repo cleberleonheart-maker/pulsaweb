@@ -65,6 +65,12 @@ main { flex: 1; overflow-y: auto; padding-bottom: 8px; }
 
 /* Lists */
 .list { padding: 4px 8px 16px; }
+#search-wrap { padding: 0 12px 6px; position: sticky; top: 0; z-index: 9; background: var(--bg); }
+#search { width: 100%; background: var(--surface); border: 1px solid var(--divider); color: var(--text); border-radius: 22px; padding: 10px 16px; font-size: 15px; outline: none; }
+#search:focus { border-color: var(--primary); }
+.p-vol { display: flex; align-items: center; gap: 10px; padding: 0 24px 18px; }
+.p-vol .pl { color: var(--text2); font-size: 16px; }
+.p-vol .pr { color: var(--primary); font-size: 13px; font-weight: 700; cursor: pointer; min-width: 34px; text-align: right; user-select: none; }
 .item {
   display: flex; align-items: center; gap: 12px;
   padding: 10px 8px; border-radius: 12px; cursor: pointer;
@@ -210,6 +216,7 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
     <div id="profile-avatar" onclick="showProfile()">P</div>
   </header>
   <main id="main">
+    <div id="search-wrap"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
     <section class="tab active" id="tab-songs">
       <div class="list" id="songs-list"></div>
     </section>
@@ -279,6 +286,11 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
     <button class="pc" id="p-dj" onclick="djMix()" title="DJ Virgin">🎛</button>
     <button class="pc" id="p-djvoice" onclick="djVoiceToggle()" title="Voz da DJ Virgin">🗣</button>
     <button class="pc" id="p-djmic" onclick="pjMicToggle()" title="Comando de voz (Virgin)">🎙</button>
+  </div>
+  <div class="p-vol">
+    <span class="pl">🔉</span>
+    <input type="range" id="vol" min="0" max="1" step="0.05" value="1">
+    <span class="pr" id="p-speed" onclick="cycleSpeed()" title="Velocidade de reprodução">1x</span>
   </div>
 </div>
 
@@ -374,6 +386,8 @@ function initials(name) {
   return (parts[0][0] || '?') + (parts.length > 1 ? parts[parts.length - 1][0] : '').toUpperCase();
 }
 function esc(s) { return String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+let searchQ = '';
+function matched(...vals) { return vals.some((v) => String(v || '').toLowerCase().includes(searchQ)); }
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200);
@@ -538,6 +552,8 @@ function delObj(store, id) { return new Promise((res, rej) => { const r = tx(sto
 
 // ---------- Álbuns / Artistas ----------
 let albums = [], artists = [];
+const SPEEDS = [1, 1.25, 1.5, 1.75, 2, 0.75];
+let speedIdx = 0;
 function buildAlbums() {
   const map = new Map();
   const amap = new Map();
@@ -568,6 +584,7 @@ function renderArt(art, s, size) {
 function renderSongs(list, container, favOnly) {
   container.innerHTML = '';
   if (!list.length) {
+    if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">♪</div>${
       favOnly ? 'Nenhuma favorita ainda. Toque no coração para favoritar.' : 'Nenhuma música. Importe seus arquivos abaixo.'
     }<br><button class="btn" onclick="$('fileSongs').click()">＋ Importar músicas</button></div>`;
@@ -578,9 +595,11 @@ function renderSongs(list, container, favOnly) {
     row.className = 'item';
     row.innerHTML = `<div class="art" id="a-${s.id}"></div>
       <div class="mid"><div class="it-title">${esc(s.title)}</div><div class="it-sub">${esc(s.artist)} · ${esc(s.album)}</div></div>
-      <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>`;
+      <button class="like ${state.favs.has(s.id) ? 'fav' : ''}" data-fav="${s.id}">${state.favs.has(s.id) ? '♥' : '♡'}</button>
+      <button class="like" data-del="${s.id}" title="Excluir">🗑</button>`;
     row.onclick = () => playList(list, s);
     row.querySelector('[data-fav]').onclick = (e) => { e.stopPropagation(); toggleFav(s); };
+    row.querySelector('[data-del]').onclick = (e) => { e.stopPropagation(); delSong(s.id); };
     renderArt(row.childNodes[0], s);
     container.appendChild(row);
   }
@@ -588,6 +607,7 @@ function renderSongs(list, container, favOnly) {
 function renderAlbums(container, list) {
   container.innerHTML = '';
   if (!list.length) {
+    if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">▣</div>Sem álbuns.<br><button class="btn" onclick="importPrompt(false)">＋ Importar músicas</button></div>`;
     return;
   }
@@ -604,14 +624,15 @@ function renderAlbums(container, list) {
 }
 function renderArtists(container) {
   container.innerHTML = '';
-  if (!artists.length) {
+  const list = searchQ ? artists.filter((ar) => matched(ar.name)) : artists;
+  if (!list.length) {
+    if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">◎</div>Sem artistas ainda.</div>`;
     return;
   }
-  for (const ar of artists) {
+  for (const ar of list) {
     const row = document.createElement('div');
     row.className = 'item';
-    const songs = state.songs.filter((s) => s.artist === ar.name) || [];
     row.innerHTML = `<div class="art ${grad(ar.name.length)}">${esc(initials(ar.name))}</div>
       <div class="mid"><div class="it-title">${esc(ar.name)}</div><div class="it-sub">${ar.numSongs} ${ar.numSongs === 1 ? 'música' : 'músicas'}</div></div>`;
     row.onclick = () => openDetail({ type: 'artist', name: ar.name, songs: state.songs.filter((s) => s.artist === ar.name) });
@@ -620,11 +641,18 @@ function renderArtists(container) {
 }
 function renderPlaylists(container) {
   container.innerHTML = '';
-  if (!state.playlists.length) {
+  const list = searchQ
+    ? state.playlists.filter((pl) => {
+        const s = state.songs.filter((x) => (pl.songIds || []).includes(x.id));
+        return matched(pl.name) || s.some((x) => matched(x.title, x.artist));
+      })
+    : state.playlists;
+  if (!list.length) {
+    if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">☰</div>Nenhuma playlist.<br><button class="btn" onclick="addPlaylist()">＋ Criar playlist</button></div>`;
     return;
   }
-  for (const pl of state.playlists) {
+  for (const pl of list) {
     const songs = state.songs.filter((s) => (pl.songIds || []).includes(s.id));
     const row = document.createElement('div');
     row.className = 'item';
@@ -636,11 +664,13 @@ function renderPlaylists(container) {
 }
 function renderVideos(container) {
   container.innerHTML = '';
-  if (!state.videos.length) {
+  const list = searchQ ? state.videos.filter((v) => matched(v.title)) : state.videos;
+  if (!list.length) {
+    if (searchQ) { container.innerHTML = `<div class="empty"><div class="big">?</div>Nada encontrado para <b>${esc(searchQ)}</b>.</div>`; return; }
     container.innerHTML = `<div class="empty"><div class="big">▷</div>Nenhum vídeo.<br><button class="btn" onclick="$('fileVideos').click()">＋ Importar vídeos</button></div>`;
     return;
   }
-  for (const v of state.videos) {
+  for (const v of list) {
     const row = document.createElement('div');
     row.className = 'item';
     row.innerHTML = `<div class="art grad-c">▷</div>
@@ -652,9 +682,10 @@ function renderVideos(container) {
 }
 
 function renderAll() {
-  renderSongs(state.songs, $('songs-list'), false);
-  renderSongs(state.songs.filter((s) => state.favs.has(s.id)), $('favs-list'), true);
-  renderAlbums($('albums-list'), albums);
+  const songs = searchQ ? state.songs.filter((s) => matched(s.title, s.artist, s.album)) : state.songs;
+  renderSongs(songs, $('songs-list'), false);
+  renderSongs(songs.filter((s) => state.favs.has(s.id)), $('favs-list'), true);
+  renderAlbums($('albums-list'), searchQ ? albums.filter((al) => matched(al.name, al.artist)) : albums);
   renderArtists($('artists-list'));
   renderPlaylists($('playlists-list'));
   renderVideos($('videos-list'));
@@ -672,13 +703,15 @@ function radioStatusLabel() {
 function renderRadio() {
   const list = $('radio-list');
   list.innerHTML = `<div class="section">Rádios ao vivo</div>`;
-  for (let i = 0; i < RADIO_STATIONS.length; i++) {
-    const st = RADIO_STATIONS[i];
+  const stations = searchQ ? RADIO_STATIONS.filter((st) => matched(st.name, st.genre)) : RADIO_STATIONS;
+  for (let i = 0; i < stations.length; i++) {
+    const st = stations[i];
+    const idx = RADIO_STATIONS.indexOf(st);
     const active = state.radioActive === st.url;
     const playing = active && (state.radioStatus === 'live' || state.radioStatus === 'connecting');
     const row = document.createElement('div');
     row.className = 'item' + (active ? ' active' : '');
-    row.onclick = () => toggleRadio(i);
+    row.onclick = () => toggleRadio(idx);
     row.innerHTML = `<div class="art grad-e">📻</div>
       <div class="mid"><div class="it-title">${esc(st.name)}</div><div class="it-sub">${esc(st.genre)}${active ? ' · ' + radioStatusLabel() : ''}</div></div>
       <button class="like ${playing ? 'fav' : ''}">${playing ? '⏸' : '▶'}</button>`;
@@ -1320,8 +1353,28 @@ function showProfile() {
   const list = $('modal');
   list.innerHTML = `<h3>Perfil</h3>
     <div class="mrow">Nickname: <input type="text" id="nick-in" value="${esc(state.nick)}" style="width:auto"></div>
+    <div class="mrow" id="apk-row" onclick="downloadApk()" style="margin-top:6px"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">Pulsa para Android</div><div class="it-sub" id="apk-ver">Verificando…</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button><button class="btn" onclick="saveNick()">Salvar</button></div>`;
   $('modal-wrap').classList.add('show');
+  loadApkInfo().then(() => { const v = $('apk-ver'); if (v && APK_INFO.url) v.textContent = 'Android · versão ' + APK_INFO.ver + ' · tocar para baixar'; });
+}
+let APK_INFO = { build: '', ver: '', url: '' };
+async function loadApkInfo() {
+  try {
+    const t = await (await fetch('./version')).text();
+    const parts = String(t).trim().split('|');
+    if (parts.length >= 3) APK_INFO = { build: parts[0], ver: parts[1], url: parts[2] };
+  } catch (e) { APK_INFO.url = ''; }
+}
+function downloadApk() {
+  if (!APK_INFO.url) { toast('URL do APK indisponível.'); return; }
+  window.location.href = APK_INFO.url;
+}
+function cycleSpeed() {
+  speedIdx = (speedIdx + 1) % SPEEDS.length;
+  const s = SPEEDS[speedIdx];
+  audio.playbackRate = s; video.playbackRate = s; radioAudio.playbackRate = s;
+  $('p-speed').textContent = s + 'x';
 }
 async function saveNick() {
   state.nick = $('nick-in').value.trim();
@@ -1368,6 +1421,26 @@ async function delVideo(id) {
   renderVideos($('videos-list'));
   toast('Vídeo removido');
 }
+async function delSong(id) {
+  if (!confirm('Excluir esta música? Ela também sai das playlists e favoritos.')) return;
+  const wasCurrent = state.current && state.current.id === id;
+  await delObj('songs', id);
+  state.favs.delete(id);
+  await putKV('favs', [...state.favs]);
+  if (state.learn[id]) { delete state.learn[id]; await putKV('learn', state.learn); }
+  if (objectUrlCache.has(id)) { URL.revokeObjectURL(objectUrlCache.get(id)); objectUrlCache.delete(id); }
+  for (const p of state.playlists) {
+    if (p.songIds && p.songIds.includes(id)) { p.songIds = p.songIds.filter((x) => x !== id); await putPlaylist(p); }
+  }
+  state.queue = state.queue.filter((x) => x.id !== id);
+  if (wasCurrent) {
+    audio.pause(); video.pause();
+    state.current = null; state.queue = []; state.queueIndex = -1;
+    closePlayer(); syncMini(); renderPlayer();
+  }
+  await reloadAll();
+  toast('Música removida');
+}
 
 // ---------- Boot ----------
 async function reloadAll() {
@@ -1404,6 +1477,9 @@ async function init() {
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
   $('fileVideos').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'video'); e.target.value = ''; };
+  $('search').oninput = () => { searchQ = $('search').value.trim().toLowerCase(); renderAll(); if (state.detail) { state.detail = null; selectTab(state.tab); } };
+  $('vol').oninput = () => { const v = +$('vol').value; audio.volume = v; video.volume = v; radioAudio.volume = v; };
+  $('p-speed').onclick = cycleSpeed;
   // Bus topology: um único botão de importação flutuante
   createFab();
 }
