@@ -1418,31 +1418,71 @@ async function saveNick() {
 }
 
 // ---------- Import UI ----------
-async function pickFolder() {
-  if (!window.showDirectoryPicker) { toast('Pasta requer Chrome/Edge no Windows'); return; }
-  try {
-    const dir = await window.showDirectoryPicker({ mode: 'read' });
-    const files = [];
-    async function walk(d) {
-      for await (const [name, h] of d.entries()) {
-        if (h.kind === 'file' && /\.(mp3|m4a|flac|ogg|wav|aac|opus|mp4|mkv|webm|mov|avi)$/i.test(name)) {
-          const f = await h.getFile();
-          Object.defineProperty(f, 'name', { value: name, configurable: true });
-          if (/\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(name)) files.push({ f, kind: 'song' });
-          else files.push({ f, kind: 'video' });
-        }
-        if (h.kind === 'directory') await walk(h);
+async function pickMediaFolder() {
+  if (!window.showDirectoryPicker) { toast('Pasta requer Chrome/Edge no Windows'); return null; }
+  const dir = await window.showDirectoryPicker({ mode: 'read' });
+  const files = [];
+  async function walk(d) {
+    for await (const [name, h] of d.entries()) {
+      if (h.kind === 'file' && /\.(mp3|m4a|flac|ogg|wav|aac|opus|mp4|mkv|webm|mov|avi)$/i.test(name)) {
+        const f = await h.getFile();
+        Object.defineProperty(f, 'name', { value: name, configurable: true });
+        if (/\.(mp3|m4a|flac|ogg|wav|aac|opus)$/i.test(name)) files.push({ f, kind: 'song' });
+        else files.push({ f, kind: 'video' });
       }
+      if (h.kind === 'directory') await walk(h);
     }
-    await walk(dir);
-    if (!files.length) { toast('Nenhum arquivo de mídia na pasta'); return; }
-    const songs = files.filter((x) => x.kind === 'song').map((x) => x.f);
-    const vids = files.filter((x) => x.kind === 'video').map((x) => x.f);
-    if (songs.length) await importFiles(songs, 'song');
-    if (vids.length) await importFiles(vids, 'video');
+  }
+  await walk(dir);
+  return {
+    songs: files.filter((x) => x.kind === 'song').map((x) => x.f),
+    vids: files.filter((x) => x.kind === 'video').map((x) => x.f)
+  };
+}
+async function pickFolder() {
+  try {
+    const r = await pickMediaFolder();
+    if (!r) return;
+    if (!r.songs.length && !r.vids.length) { toast('Nenhum arquivo de mídia na pasta'); return; }
+    if (r.songs.length) await importFiles(r.songs, 'song');
+    if (r.vids.length) await importFiles(r.vids, 'video');
   } catch (e) {
     if (e && e.name !== 'AbortError') toast('Erro ao ler pasta');
   }
+}
+async function pickNovidades() {
+  toast('Buscando novidades na pasta…');
+  const wasSongs = state.songs.length, wasVids = state.videos.length;
+  try {
+    const r = await pickMediaFolder();
+    if (!r) return;
+    if (!r.songs.length && !r.vids.length) { toast('Nenhum arquivo de mídia na pasta'); return; }
+    if (r.songs.length) await importFiles(r.songs, 'song');
+    if (r.vids.length) await importFiles(r.vids, 'video');
+    const novas = (state.songs.length - wasSongs) + (state.videos.length - wasVids);
+    toast(novas ? 'Novidades importadas: ' + novas : 'Pasta já estava em dia — nada novo 😊');
+  } catch (e) {
+    if (e && e.name !== 'AbortError') toast('Erro ao ler pasta');
+  }
+}
+async function checkNovidades() {
+  toast('Buscando novidades de versão…');
+  try {
+    const t = await (await fetch('./version')).text();
+    const [build, ver, url] = String(t).trim().split('|');
+    if (build && ver && url) APK_INFO = { build, ver, url };
+    const last = await getKV('lastNotified');
+    if (!last || last !== ver) {
+      putKV('lastNotified', ver);
+      const list = $('modal');
+      list.innerHTML = `<h3>Novidades!</h3>
+        <div class="mrow" onclick="closeModal();downloadApk()"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">Pulsa Android ${esc(ver)}</div><div class="it-sub">Atualização disponível no GitHub</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
+        <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
+      $('modal-wrap').classList.add('show');
+    } else {
+      toast('Nada de novo por aqui 😊');
+    }
+  } catch (e) { toast('Sem conexão com o GitHub'); }
 }
 
 // ---------- Remoção ----------
@@ -1543,6 +1583,8 @@ function createFab() {
       <div class="mrow" onclick="importPrompt()"><span class="art grad-e">♪</span><div class="mid"><div class="it-title">Músicas</div><div class="it-sub">Selecionar arquivos de áudio</div></div></div>
       <div class="mrow" onclick="$('fileVideos').click()"><span class="art grad-c">▷</span><div class="mid"><div class="it-title">Vídeos</div><div class="it-sub">Selecionar arquivos de vídeo</div></div></div>
       <div class="mrow" onclick="pickFolder()"><span class="art grad-b">📁</span><div class="mid"><div class="it-title">Pasta inteira</div><div class="it-sub">Chrome/Edge no Windows</div></div></div>
+      <div class="mrow" onclick="pickNovidades()"><span class="art grad-b">🔎</span><div class="mid"><div class="it-title">Buscar novidades na pasta</div><div class="it-sub">Reler a pasta e importar só o que é novo</div></div></div>
+      <div class="mrow" onclick="checkNovidades()"><span class="art grad-e">✨</span><div class="mid"><div class="it-title">Buscar novidades de versão</div><div class="it-sub">Verifica atualização do app no GitHub</div></div></div>
       <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>`;
     $('modal-wrap').classList.add('show');
   };
