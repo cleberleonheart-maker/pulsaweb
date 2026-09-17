@@ -219,6 +219,42 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
 .grad-c { background: linear-gradient(135deg,#5CD859,#26A65A); }
 .grad-d { background: linear-gradient(135deg,#FFA502,#E67E22); }
 .grad-e { background: linear-gradient(135deg,#B388FF,#7C4DFF); }
+
+/* Celular (remote) */
+#phone-view .phone-card {
+  background: var(--surface); border: 1px solid var(--divider);
+  border-radius: 16px; padding: 16px; margin: 8px 0 16px;
+}
+#phone-view .phone-status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; color: var(--text2); margin-bottom: 10px;
+}
+#phone-view .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text2); flex-shrink: 0; }
+#phone-view .dot.on { background: #5CD859; box-shadow: 0 0 8px #5CD859; }
+#phone-view .phone-song { display: flex; align-items: center; gap: 12px; }
+#phone-view .phone-song .art { width: 54px; height: 54px; }
+#phone-view .phone-song .it-title { font-size: 16px; }
+#phone-view .phone-controls {
+  display: flex; align-items: center; justify-content: center;
+  gap: 20px; margin: 14px 0 6px;
+}
+#phone-view .phone-controls button {
+  background: none; border: none; color: var(--text); font-size: 24px;
+  cursor: pointer; padding: 8px; line-height: 1; width: 46px; height: 46px;
+}
+#phone-view .phone-controls .pmain { color: var(--primary); font-size: 38px; width: 66px; height: 66px; }
+#phone-view .pseek { margin: 8px 0 2px; }
+#phone-view .pvol {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  color: var(--text2); font-size: 14px;
+}
+#phone-view .phone-clist { margin-top: 6px; }
+#phone-view .phone-clist .item { padding: 8px; }
+#phone-view .phone-clist .item.play { background: var(--surface-v); border: 1px solid var(--divider); border-radius: 12px; }
+#phone-view .elink {
+  color: var(--primary); cursor: pointer; font-size: 13px; font-weight: 700;
+  padding: 6px; display: inline-flex; align-items: center; gap: 6px;
+}
 </style>
 </head>
 <body>
@@ -253,6 +289,9 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
     <section class="tab" id="tab-radio">
       <div class="list" id="radio-list"></div>
     </section>
+    <section class="tab" id="tab-phone">
+      <div class="list" id="phone-view"></div>
+    </section>
     <section class="tab" id="tab-detail">
       <div class="list" id="detail-list"></div>
     </section>
@@ -274,6 +313,7 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
     <button data-tab="favs" onclick="selectTab('favs')"><span class="ic">♥</span>Favoritas</button>
     <button data-tab="videos" onclick="selectTab('videos')"><span class="ic">▷</span>Vídeos</button>
     <button data-tab="radio" onclick="selectTab('radio')"><span class="ic">📻</span>Rádio</button>
+    <button data-tab="phone" onclick="selectTab('phone')"><span class="ic">📱</span>Celular</button>
   </nav>
 </div>
 
@@ -332,6 +372,7 @@ const state = {
   shuffle: false, repeat: 0, favs: new Set(), nick: '', theme: 'dark',
   djMode: false, djVoice: true, djMic: false, learn: {},
   radioActive: null, radioStatus: 'stopped',
+  phone: { dev: '', online: false, state: null, songs: null, syncing: false },
   db: null
 };
 
@@ -339,6 +380,7 @@ const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
 const radioAudio = $('radioAudio');
 const UNKNOWN = 'Desconhecido';
+const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
 
 const RADIO_STATIONS = [
   { name: 'Itaramã FM 97.1', genre: 'Hits / Litoral Gaúcho', url: 'https://player.voxhd.com.br/proxy/7716' },
@@ -809,7 +851,7 @@ function selectTab(tab, updateDetail) {
   $('tab-' + tab).classList.add('active');
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
-  $('title').textContent = { songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio' }[tab];
+  $('title').textContent = { songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio', phone: 'Celular' }[tab];
 }
 let detailBackStack = null;
 function openDetail(d) {
@@ -1601,6 +1643,140 @@ async function delSong(id) {
   toast('Música removida');
 }
 
+// ---------- Remote control (celular via telemetria) ----------
+let phoneTimer = 0;
+function fmtClock(ms) { return fmtTime(ms || 0); }
+function phoneStatusLine() {
+  const p = state.phone;
+  const dev = (p.dev || '').slice(0, 8);
+  const app = p.state && p.state.app ? ' · Pulsa ' + p.state.app : '';
+  if (p.online) return `<span class="dot on" style="display:inline-block"></span> Celular conectado (${esc(dev)}${app})`;
+  return '<span class="dot" style="display:inline-block"></span> Celular offline — abra o Pulsa no Android';
+}
+function phonePlaying() {
+  const s = state.phone.state;
+  return s && s.playing && s.current;
+}
+async function pollRemote() {
+  try {
+    const r = await fetch(REMOTE + '/remote', { cache: 'no-store' });
+    if (!r.ok) throw new Error('!ok');
+    const d = await r.json();
+    state.phone.dev = d.dev || '';
+    state.phone.state = d.state || null;
+    state.phone.songs = d.songs && d.songs.songs ? d.songs.songs : null;
+    state.phone.online = !!(d.state && d.state.ts && Date.now() / 1000 - d.state.ts < 20);
+    renderPhone();
+  } catch (e) {
+    state.phone.online = false;
+    renderPhone();
+  }
+}
+async function sendCmd(cmd, value) {
+  try {
+    await fetch(REMOTE + '/cmd', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, value })
+    });
+  } catch (e) { toast('Sem conexão com o servidor do celular.'); }
+}
+function phonePlay() { sendCmd('toggle'); }
+function phonePrev() { sendCmd('prev'); }
+function phoneNext() { sendCmd('next'); }
+function phoneSeekNow(v) { sendCmd('seek', Math.round(+v * 1000)); }
+function phoneVolume(v) { sendCmd('volume', Math.round(+v * 100)); }
+function phoneReload() {
+  pollRemote().then(() => toast('Lista do celular atualizada.'));
+}
+function renderPhone() {
+  const cv = $('phone-view');
+  if (!cv) return;
+  const p = state.phone;
+  const s = p.state || {};
+  const cur = s.current || null;
+  const q = s.queue && s.queue.length ? s.queue : [];
+  const songs = p.songs || [];
+  let html = `<div class="phone-card">
+    <div class="phone-status">${phoneStatusLine()}</div>`;
+
+  if (cur) {
+    const playing = phonePlaying();
+    html += `<div class="phone-song">
+      <div class="art grad-e" style="width:54px;height:54px;font-size:20px">${esc(initials((cur.album && cur.album !== UNKNOWN ? cur.album : cur.title) || '?'))}</div>
+      <div class="mid">
+        <div class="it-title">${esc(cur.title)}</div>
+        <div class="it-sub">${esc(cur.artist || '')}${cur.album && cur.album !== UNKNOWN ? ' · ' + esc(cur.album) : ''}</div>
+      </div>
+    </div>
+    <div class="phone-controls">
+      <button onclick="phonePrev()" title="Anterior">⏮</button>
+      <button class="pmain" onclick="phonePlay()">${playing ? '⏸' : '▶'}</button>
+      <button onclick="phoneNext()" title="Próxima">⏭</button>
+    </div>
+    <input type="range" class="pseek" id="phone-seek" min="0" value="${(s.positionMs || 0) / 1000}" max="${Math.round((cur.durationMs || 1000) / 1000)}" step="0.1">
+    <div class="p-time" style="display:flex;justify-content:space-between;font-size:11.5px;color:var(--text2);padding:0 2px">
+      <span>${fmtClock(s.positionMs)}</span><span>${fmtClock(cur.durationMs)}</span>
+    </div>
+    <div class="pvol">🔉 <input type="range" id="phone-vol" min="0" max="100" step="1" value="${s.volume != null ? s.volume : 70}"> 🔊</div>`;
+  } else {
+    html += `<div class="empty" style="padding:20px 8px"><div class="big">📱</div>Nada tocando no celular.</div>`;
+  }
+
+  html += `<div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+      <div class="elink" onclick="phoneReload()">🔎 Buscar novidades</div>
+      <div class="elink" onclick="phoneReload()">🔄 Atualizar</div>
+    </div>
+  </div>`;
+
+  html += `<div class="section">Fila no celular${q.length ? ' · ' + q.length : ''}</div>
+  <div class="phone-clist" id="phone-queue">`;
+  if (q.length) {
+    q.slice(0, 20).forEach((x, i) => {
+      const active = cur && cur.id === x.id;
+      html += `<div class="item${active ? ' play' : ''}">
+        <div class="art small grad-${'abcde'[i % 5]}"></div>
+        <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')}</div></div>
+        <span style="color:var(--text2);font-size:12px">${fmtClock(x.durationMs)}</span>
+      </div>`;
+    });
+  } else {
+    html += `<div class="empty" style="padding:16px 8px"><div class="big">♪</div>Fila vazia no celular.</div>`;
+  }
+  html += `</div>`;
+
+  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''}</div>
+  <div id="phone-songs">`;
+  if (songs.length) {
+    const list = songs.slice(0, 50);
+    for (const x of list) {
+      html += `<div class="item">
+        <div class="art small">${esc(initials((x.album && x.album !== UNKNOWN ? x.album : x.title) || '?'))}</div>
+        <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')} · ${fmtClock(x.durationMs)}</div></div>
+      </div>`;
+    }
+    if (songs.length > 50) html += `<div class="elink" style="padding:10px" onclick="phoneReload()">+ ${songs.length - 50} mais — atualizar lista</div>`;
+  } else {
+    html += `<div class="empty" style="padding:16px 8px">O celular ainda não enviou a biblioteca. Aguarde o app sincronizar.</div>`;
+  }
+  html += `</div>`;
+
+  cv.innerHTML = html;
+  const sk = $('phone-seek');
+  if (sk) {
+    sk.oninput = () => { phoneSeekNow(sk.value); };
+    sk.ontouchstart = (e) => e.stopPropagation();
+  }
+  const vl = $('phone-vol');
+  if (vl) {
+    let t = 0;
+    vl.oninput = () => { clearTimeout(t); t = setTimeout(() => phoneVolume(vl.value), 250); };
+  }
+}
+function startPhonePoll() {
+  clearInterval(phoneTimer);
+  phoneTimer = setInterval(pollRemote, 3000);
+  pollRemote();
+}
+
 // ---------- Boot ----------
 async function reloadAll() {
   state.songs = await getAll('songs');
@@ -1628,6 +1804,7 @@ async function init() {
     if (i >= 0) { state.queueIndex = i; playCurrent(); syncMini(); }
   }
   renderAll();
+  startPhonePoll();
   if (navigator.serviceWorker && navigator.serviceWorker.register) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
