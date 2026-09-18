@@ -13,19 +13,30 @@
 <link rel="apple-touch-icon" href="icon.svg">
 <style>
 :root {
-  --bg: #121212;
-  --surface: #1E1E1E;
-  --surface-v: #2A2A2A;
-  --primary: #B388FF;
-  --primary-dark: #7C4DFF;
-  --text: #E8E8E8;
-  --text2: #9E9E9E;
-  --divider: #2E2E2E;
+  --bg: #0B0F2A;
+  --surface: rgba(20,26,58,.55);
+  --surface-v: rgba(28,35,74,.35);
+  --surface-solid: #141A3A;
+  --primary: #00E5FF;
+  --primary-dark: #0088CC;
+  --secondary: #FF2FD6;
+  --tertiary: #B388FF;
+  --text: #EAF6FF;
+  --text2: #9DB4D5;
+  --divider: rgba(0,229,255,.14);
+  --glass-b: rgba(255,255,255,.06);
+  --glow: 0 0 14px rgba(0,229,255,.55);
+  --glow-soft: 0 0 8px rgba(0,229,255,.28);
+  --blur: blur(18px) saturate(130%);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; height: 100%; }
 body {
-  background: var(--bg);
+  background:
+    radial-gradient(1200px 600px at 12% -8%, rgba(0,229,255,.16), transparent 60%),
+    radial-gradient(1100px 700px at 108% 16%, rgba(255,47,214,.15), transparent 60%),
+    radial-gradient(900px 620px at 48% 108%, rgba(179,136,255,.14), transparent 62%),
+    var(--bg);
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   overflow: hidden;
@@ -140,7 +151,7 @@ nav button.active { color: var(--primary); }
 /* Player overlay */
 #player {
   position: fixed; inset: 0; z-index: 20;
-  background: linear-gradient(160deg, #1A0B2E 0%, #121212 55%);
+  background: linear-gradient(160deg, #141A3A 0%, #0B0F2A 60%);
   display: none; flex-direction: column;
 }
 #player.show { display: flex; }
@@ -194,7 +205,9 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
 /* misc */
 html.light {
   --bg: #F5F3FA; --surface: #FFFFFF; --surface-v: #EDEAF5;
-  --primary: #7C4DFF; --primary-dark: #5E35B1;
+  --surface-solid: #FFFFFF;
+  --primary: #FF2FD6; --primary-dark: #C02FA8;
+  --secondary: #00E5FF; --tertiary: #7C4DFF;
   --text: #1C1A23; --text2: #6E6A7A; --divider: #E3E0EC;
 }
 html.light #player { background: linear-gradient(160deg, #EFEAFA 0%, #F5F3FA 55%); }
@@ -220,6 +233,50 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
 .grad-c { background: linear-gradient(135deg,#5CD859,#26A65A); }
 .grad-d { background: linear-gradient(135deg,#FFA502,#E67E22); }
 .grad-e { background: linear-gradient(135deg,#B388FF,#7C4DFF); }
+.v-hero { text-align: center; padding: 26px 16px 8px; }
+.v-avatar {
+  width: 108px; height: 108px; margin: 0 auto; position: relative; cursor: pointer;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 28%, #FFE3F2, #FF8AD0 48%, #B388FF 100%);
+  box-shadow: 0 0 34px rgba(255,110,199,.55), inset 0 -10px 20px rgba(124,77,255,.35), inset 0 6px 12px rgba(255,255,255,.5);
+  animation: virgin-bob 3.2s ease-in-out infinite;
+  transition: transform .2s;
+}
+.v-avatar:active { transform: scale(.95); }
+.v-avatar .v-bow { position: absolute; top: -8px; right: 4px; font-size: 30px; filter: drop-shadow(0 3px 6px rgba(255,110,199,.6)); transform: rotate(12deg); }
+.v-avatar .face { position: absolute; inset: 0; }
+.v-avatar .eye {
+  position: absolute; top: 42%; width: 13px; height: 16px; border-radius: 50%;
+  background: #33113A; animation: virgin-blink 4.2s infinite;
+}
+.v-avatar .eye.l { left: 28%; } .v-avatar .eye.r { right: 28%; animation-delay: .06s; }
+.v-avatar .eye::after { content: ''; position: absolute; top: 3px; left: 4px; width: 5px; height: 5px; border-radius: 50%; background: #fff; opacity: .95; }
+.v-avatar .blush { position: absolute; top: 58%; width: 18px; height: 10px; border-radius: 50%; background: rgba(255,55,140,.55); filter: blur(1.5px); }
+.v-avatar .blush.l { left: 16%; } .v-avatar .blush.r { right: 16%; }
+.v-avatar .mouth {
+  position: absolute; left: 50%; top: 60%; width: 20px; height: 9px;
+  transform: translateX(-50%); border-bottom: 3px solid #33113A;
+  border-radius: 0 0 14px 14px;
+}
+.v-avatar.playing { animation: virgin-dance .55s ease-in-out infinite; }
+.v-avatar.playing .mouth { height: 14px; border-radius: 0 0 16px 16px; }
+.v-avatar.sleep { animation: virgin-bob 4.6s ease-in-out infinite; filter: saturate(.65); }
+.v-avatar.sleep .eye { animation: none; height: 3px; border-radius: 2px; }
+.v-avatar.sleep .eye::after { display: none; }
+@keyframes virgin-blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+@keyframes virgin-bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes virgin-dance { 0%, 100% { transform: translateY(0) rotate(-4deg); } 50% { transform: translateY(-6px) rotate(4deg); } }
+.v-name { font-size: 30px; font-weight: 800; margin-top: 8px; background: linear-gradient(90deg,#FF6EC7,#B388FF); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.v-status { font-size: 13px; color: var(--text2); margin-top: 6px; }
+.v-status.on { color: var(--primary); font-weight: 700; }
+.v-actions { display: flex; gap: 10px; padding: 14px 16px 6px; }
+.v-now { margin-top: 12px; }
+.v-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 6px 16px 16px; }
+.v-card { background: var(--surface); border: 1px solid var(--divider); border-radius: 14px; padding: 14px; text-align: center; cursor: pointer; }
+.v-card.on { border-color: var(--primary); background: var(--surface-v); }
+.v-ic { font-size: 26px; }
+.v-l { font-weight: 700; margin-top: 4px; font-size: 14px; }
+.v-s { font-size: 11.5px; color: var(--text2); margin-top: 2px; }
 
 /* Celular (remote) */
 #phone-view .phone-card {
@@ -257,19 +314,141 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
   padding: 6px; display: inline-flex; align-items: center; gap: 6px;
 }
 </style>
+<style id="redesign-futuro">
+/* Futurista sci-fi feminino: fundo em grade neon animado + glassmorphism neon em todos os painéis */
+html:not(.light) body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(1200px 800px at 110% -10%, rgba(0,229,255,.18), transparent 55%),
+    radial-gradient(1000px 700px at -10% 110%, rgba(255,47,214,.16), transparent 55%),
+    radial-gradient(700px 500px at 60% 6%, rgba(179,136,255,.12), transparent 60%);
+}
+html:not(.light) body::after {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(0,229,255,.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,.05) 1px, transparent 1px);
+  background-size: 38px 38px; mask-image: radial-gradient(ellipse at center, #000 30%, transparent 78%);
+}
+html:not(.light) header {
+  background: linear-gradient(180deg, rgba(11,15,42,.9), rgba(11,15,42,.55) 80%, transparent);
+  backdrop-filter: var(--blur);
+}
+html:not(.light) #search-wrap { background: transparent; }
+html:not(.light) #search {
+  background: rgba(20,26,58,.55); border-color: rgba(0,229,255,.14);
+  backdrop-filter: blur(10px) saturate(140%);
+}
+html:not(.light) #search:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,229,255,.14); }
+html:not(.light) .list, html:not(.light) .alb-grid, html:not(.light) .grid {
+  backdrop-filter: blur(10px) saturate(140%);
+}
+html:not(.light) .item, html:not(.light) .mrow, html:not(.light) .empty, html:not(.light) .section, html:not(.light) .v-card {
+  background: rgba(20,26,58,.5) !important;
+  border: 1px solid rgba(0,229,255,.14) !important;
+  backdrop-filter: blur(12px) saturate(150%);
+}
+html:not(.light) .item, html:not(.light) .v-card {
+  transition: transform .18s ease, box-shadow .2s ease, border-color .2s ease;
+}
+html:not(.light) .item:hover, html:not(.light) .mrow:hover, html:not(.light) .v-card:hover {
+  border-color: rgba(0,229,255,.55) !important;
+  box-shadow: 0 0 24px rgba(0,229,255,.25), inset 0 0 12px rgba(0,229,255,.08);
+  transform: translateY(-2px);
+}
+html:not(.light) .v-card.on {
+  border-color: var(--secondary) !important;
+  box-shadow: 0 0 24px rgba(255,47,214,.35), inset 0 0 12px rgba(255,47,214,.12);
+}
+html:not(.light) .v-avatar {
+  box-shadow: 0 0 40px rgba(255,110,199,.65), inset 0 -10px 20px rgba(124,77,255,.35), inset 0 6px 12px rgba(255,255,255,.5);
+}
+html:not(.light) #radio-list .item.active, html:not(.light) #amb-list .item.active, html:not(.light) #phone-view .phone-clist .item.play {
+  border-color: var(--secondary) !important; box-shadow: 0 0 26px rgba(255,47,214,.4), inset 0 0 12px rgba(255,47,214,.12);
+}
+html:not(.light) .grad-a { background: linear-gradient(135deg,#FF2FD6,#7C4DFF) !important; }
+html:not(.light) .grad-b { background: linear-gradient(135deg,#00E5FF,#0088FF) !important; }
+html:not(.light) .grad-c { background: linear-gradient(135deg,#30FFC0,#00B8D9) !important; }
+html:not(.light) .grad-d { background: linear-gradient(135deg,#FF9E2C,#FF2FD6) !important; }
+html:not(.light) .grad-e { background: linear-gradient(135deg,#B388FF,#FF2FD6) !important; }
+html:not(.light) nav {
+  background: rgba(20,26,58,.55) !important; backdrop-filter: blur(18px) saturate(140%);
+  border-top-color: rgba(0,229,255,.14) !important;
+}
+html:not(.light) nav button.active, html:not(.light) .like.fav, html:not(.light) .mm.primary {
+  color: var(--primary); text-shadow: 0 0 12px rgba(0,229,255,.6);
+}
+html:not(.light) #mini {
+  background: rgba(20,26,58,.55) !important; backdrop-filter: blur(18px) saturate(140%);
+  border-top-color: rgba(0,229,255,.14) !important;
+}
+html:not(.light) #player {
+  background:
+    radial-gradient(900px 700px at 88% -18%, rgba(255,47,214,.2), transparent 55%),
+    radial-gradient(900px 700px at -12% 112%, rgba(0,229,255,.18), transparent 55%),
+    linear-gradient(160deg, #141A3A 0%, #0B0F2A 60%);
+}
+html:not(.light) .p-art {
+  border: 1px solid rgba(0,229,255,.18);
+  box-shadow: 0 18px 60px rgba(0,229,255,.28), 0 0 44px rgba(255,47,214,.16);
+}
+html:not(.light) .p-top span { color: var(--text2); text-shadow: 0 0 10px rgba(0,229,255,.4); }
+html:not(.light) .pc.big { color: var(--secondary); text-shadow: 0 0 18px rgba(255,47,214,.65); }
+html:not(.light) .pc.primary { color: var(--primary); text-shadow: 0 0 12px rgba(0,229,255,.6); }
+html:not(.light) .p-vol .pr { color: var(--primary); }
+html:not(.light) input[type=range] {
+  background: rgba(28,35,74,.6); box-shadow: inset 0 0 6px rgba(0,0,0,.4);
+}
+html:not(.light) input[type=range]::-webkit-slider-thumb { background: var(--primary); box-shadow: 0 0 10px rgba(0,229,255,.7); }
+html:not(.light) input[type=range]::-moz-range-thumb { background: var(--primary); box-shadow: 0 0 10px rgba(0,229,255,.7); }
+html:not(.light) #modal {
+  background: rgba(20,26,58,.94) !important; backdrop-filter: blur(22px) saturate(150%);
+  border: 1px solid rgba(0,229,255,.16); border-bottom: none;
+}
+html:not(.light) #modal input[type=text] {
+  background: rgba(28,35,74,.6); border-color: rgba(0,229,255,.14);
+}
+html:not(.light) #modal input[type=text]:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(0,229,255,.12); }
+html:not(.light) .toast {
+  background: rgba(20,26,58,.94); border: 1px solid rgba(0,229,255,.2);
+  box-shadow: 0 6px 24px rgba(0,0,0,.5), 0 0 20px rgba(0,229,255,.25);
+}
+html:not(.light) #profile-avatar { box-shadow: 0 0 18px rgba(255,47,214,.45); }
+html:not(.light) #title {
+  background: linear-gradient(90deg,#fff 10%, #B388FF 70%, #FF2FD6 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+html:not(.light) .it-title, html:not(.light) .v-l { text-shadow: 0 0 16px rgba(0,229,255,.35); }
+html:not(.light) .empty .big { text-shadow: 0 0 40px rgba(0,229,255,.7); }
+html:not(.light) .btn { background: linear-gradient(135deg,#00E5FF,#0088CC); box-shadow: 0 0 18px rgba(0,229,255,.35); }
+html:not(.light) .btn.secondary { background: rgba(28,35,74,.6); color: var(--text); box-shadow: none; }
+html:not(.light) #phone-view .phone-card {
+  background: rgba(20,26,58,.5) !important; border-color: rgba(0,229,255,.14) !important;
+  backdrop-filter: blur(12px) saturate(150%);
+}
+@keyframes redes-futuro-flut {
+  0%,100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(1.5deg); }
+}
+html:not(.light) .art.ph-flut { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
+html:not(.light) .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
+</style>
 </head>
 <body>
 <div id="bg-anim"></div>
 <div id="app">
   <header>
     <button id="back" onclick="goBack()">←</button>
-    <div id="title">Músicas</div>
+    <div id="title">Virgin</div>
     <button class="tbtn" id="addPlaylistBtn" onclick="addPlaylist()" title="Nova playlist">＋</button>
     <div id="profile-avatar" onclick="showProfile()">P</div>
   </header>
   <main id="main">
     <div id="search-wrap"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
-    <section class="tab active" id="tab-songs">
+    <section class="tab active" id="tab-virgin">
+      <div class="list" id="virgin-list"></div>
+    </section>
+    <section class="tab" id="tab-songs">
       <div class="list" id="songs-list"></div>
     </section>
     <section class="tab" id="tab-albums">
@@ -310,7 +489,8 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
     <button class="mm primary" id="mini-play" onclick="event.stopPropagation();togglePlay()">▶</button>
   </div>
   <nav id="nav">
-    <button data-tab="songs" class="active" onclick="selectTab('songs')"><span class="ic">♪</span>Músicas</button>
+    <button data-tab="virgin" class="active" onclick="selectTab('virgin')"><span class="ic">🎧</span>Virgin</button>
+    <button data-tab="songs" onclick="selectTab('songs')"><span class="ic">♪</span>Músicas</button>
     <button data-tab="albums" onclick="selectTab('albums')"><span class="ic">▣</span>Álbuns</button>
     <button data-tab="artists" onclick="selectTab('artists')"><span class="ic">◎</span>Artistas</button>
     <button data-tab="playlists" onclick="selectTab('playlists')"><span class="ic">☰</span>Playlists</button>
@@ -764,6 +944,7 @@ function renderAll() {
   renderVideos($('videos-list'));
   renderRadio();
   renderAmb();
+  renderVirgin();
   if (state.detail) renderDetail();
 }
 
@@ -1091,7 +1272,7 @@ function selectTab(tab, updateDetail) {
   $('tab-' + tab).classList.add('active');
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
-  $('title').textContent = { songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio', amb: 'Som de fundo', phone: 'Celular' }[tab];
+  $('title').textContent = { virgin: 'Virgin', songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio', amb: 'Som de fundo', phone: 'Celular' }[tab];
 }
 let detailBackStack = null;
 function openDetail(d) {
@@ -1224,6 +1405,7 @@ function djExit() {
   state.djMode = false;
   if (state.djPrevRepeat !== undefined) { state.repeat = state.djPrevRepeat; state.djPrevRepeat = undefined; }
   $('p-dj').style.color = 'var(--text)';
+  renderVirgin();
 }
 function pickDjVoice(u) {
   const vs = speechSynthesis.getVoices();
@@ -1262,21 +1444,13 @@ function djVoiceToggle() {
   state.djVoice = !state.djVoice;
   $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
   if (state.djVoice) djSpeak('Oi! Eu sou a Virgin, sua DJ virtual!');
+  renderVirgin();
 }
 function djAnnounceTrack(s) {
   if (!s) return;
   djSpeak('Agora tocando: ' + (s.artist ? s.artist + ', ' : '') + (s.title || '') + '.');
-  const st = djLearnGet(s.id);
-  if (state.djMode && Math.random() < 0.4) {
-    const comments = [
-      'Essa é umas boas!',
-      'Tipo essa eu gosto de tocar.',
-      'Boa escolha da máquina, né?',
-      'Essa vai longe na balada.'
-    ];
-    const pick = state.favs.has(s.id) ? 'Essa é das suas favoritas!' : comments[Math.floor(Math.random() * comments.length)];
-    setTimeout(() => { if (state.djMode) djSpeak(pick); }, 2800);
-  }
+  if (!state.djMode) return;
+  setTimeout(() => { if (state.djMode) djCuriosidade(s); }, 3200);
 }
 function djEngine(pool) {
   const set = pool.slice();
@@ -1346,9 +1520,46 @@ const VIRGIN_FACTS = [
   'Curiosidade: o vinil voltou a vender mais que o CD em 2020. O analógico tem um charme que o digital não mata.',
   'Sabia que existem mais de cem milhões de músicas disponíveis hoje? Imagina eu mixando tudo isso! Dava uma festa infinita.'
 ];
-function djCuriosidade() {
-  const cur = state.current;
+const WIKI_CACHE = new Map();
+function fetchWithTimeout(url, ms) {
+  const useSignal = typeof AbortSignal !== 'undefined' && AbortSignal.timeout;
+  const ctl = useSignal ? null : new AbortController();
+  const timer = ctl ? setTimeout(() => ctl.abort(), ms) : null;
+  return fetch(url, ctl ? { signal: ctl.signal } : { signal: AbortSignal.timeout(ms) })
+    .finally(() => { if (timer) clearTimeout(timer); });
+}
+function wikiCuriosity(artist) {
+  const name = String(artist || '').trim();
+  const key = name.toLowerCase().replace(/\s+/g, ' ');
+  if (!key || /desconhecid|unknown/i.test(name) || /[./\\]/.test(name)) return Promise.resolve('');
+  if (WIKI_CACHE.has(key)) return Promise.resolve(WIKI_CACHE.get(key));
+  return fetchWithTimeout('https://pt.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(name), 6500)
+    .then((r) => (r.ok ? r.json() : Promise.reject(new Error('http'))))
+    .then((j) => {
+      let txt = String(j.extract || '').replace(/\s+/g, ' ').trim();
+      txt = txt.replace(/\s+\([^()]*\)/g, ' ').replace(/\s*\([^()]*\)$/g, '').trim();
+      if (!txt || !/^[A-ZÀ-Ý0-9]/.test(txt)) txt = '';
+      else {
+        const s = txt.match(/[^.!?]+[.!?]+/g) || [txt];
+        txt = (s[0] + (s[1] ? ' ' + s[1] : '')).trim();
+        if (txt.length > 200) txt = txt.slice(0, 197).replace(/[^ ]*$/, '') + '...';
+      }
+      WIKI_CACHE.set(key, txt);
+      return txt;
+    })
+    .catch(() => { WIKI_CACHE.set(key, ''); return ''; });
+}
+async function djCuriosidade(s) {
+  const cur = s || state.current;
   const banda = cur && (cur.artist || cur.album || '').trim();
+  if (banda) {
+    const w = await wikiCuriosity(banda);
+    if (w) {
+      djSpeak('Entre uma música e outra, uma curiosidade: ' + w);
+      toast('📚 Curiosidade sobre ' + banda + '!');
+      return;
+    }
+  }
   const msg = VIRGIN_FACTS[Math.floor(Math.random() * VIRGIN_FACTS.length)];
   djSpeak(banda
     ? 'Curiosidade sobre a banda ' + banda + '. ' + msg
@@ -1375,6 +1586,7 @@ function djLocutorToggle() {
     ? 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.'
     : 'Modo locutor desativado. Voltamos ao modo DJ normal.');
   if (state.djLocutor) djFactTimerStart(); else djFactTimerStop();
+  renderVirgin();
 }
 let djFactTimer = null;
 function djFactTimerStart() {
@@ -1387,8 +1599,94 @@ function djFactTimerStart() {
 function djFactTimerStop() {
   if (djFactTimer) { clearInterval(djFactTimer); djFactTimer = null; }
 }
+// ---------- Avatar da Virgin ----------
+const VIRGIN_PHRASES = [
+  'Oi, linda! Bora ouvir uma boa música?',
+  'Você está incrível hoje, viu?',
+  'Já escolheu suas favoritas? Eu adoro um coraçãozinho.',
+  'Respira fundo. A música cuida do resto.',
+  'Bora deixar o dia mais bonito!',
+  'Eu acredito em você. Sempre.',
+  'Um bom som resolve quase tudo.',
+  'Dance um pouquinho, faz bem pro coração!'
+];
+function virginSpeakMood() {
+  const p = VIRGIN_PHRASES[Math.floor(Math.random() * VIRGIN_PHRASES.length)];
+  djSpeak(p); toast(p);
+}
+function updateVirginMood() {
+  const av = $('virgin-avatar');
+  if (!av) return;
+  const now = state.current;
+  const el = now && (now.type === 'video' ? video : audio);
+  const playing = !!(now && el && el.src && !el.paused);
+  av.classList.toggle('playing', playing);
+  av.classList.toggle('sleep', !!state.sleepEnd && !playing);
+}
+function renderVirgin() {
+  const list = $('virgin-list');
+  if (!list) return;
+  const hasSongs = state.songs.length > 0;
+  const now = state.current;
+  const elNow = now && (now.type === 'video' ? video : audio);
+  const paused = !elNow || !elNow.src || elNow.paused;
+  const status = state.djMode
+    ? 'Tocando agora'
+    : (hasSongs ? 'Pronta para mixar' : 'Sem músicas ainda');
+  let html = `<div class="v-hero">
+      <div class="v-avatar" id="virgin-avatar" onclick="virginSpeakMood()" title="Falar com a Virgin">
+        <span class="v-bow">🎀</span>
+        <div class="face">
+          <div class="eye l"></div><div class="eye r"></div>
+          <div class="blush l"></div><div class="blush r"></div>
+          <div class="mouth"></div>
+        </div>
+      </div>
+      <div class="v-name">Virgin</div>
+      <div class="v-status ${state.djMode ? 'on' : ''}">${state.djMode ? '●' : '○'} ${esc(status)}</div>
+    </div>`;
+  if (now) {
+    html += `<div class="item v-now" onclick="openPlayer()">
+      <div class="art" id="vnow-art"></div>
+      <div class="mid"><div class="it-title">${esc(now.title)}</div><div class="it-sub">${esc(now.artist)} · ${esc(now.album)}</div></div>
+      <button class="mm primary" onclick="event.stopPropagation();togglePlay()">${paused ? '▶' : '⏸'}</button>
+    </div>`;
+  }
+  if (!state.djMode) {
+    html += `<div class="v-actions">
+      <button class="btn" onclick="hasSongs&&djMix()||$('fileSongs').click()" style="flex:1">${hasSongs ? '🎛 Iniciar Virgin' : '＋ Importar músicas'}</button>
+    </div>`;
+    if (hasSongs) {
+      html += `<div class="v-actions">
+        <button class="btn secondary" onclick="djMix('bombar')" style="flex:1">🎉 Bombar</button>
+        <button class="btn secondary" onclick="djMix('relaxar')" style="flex:1">🌙 Relaxar</button>
+      </div>`;
+    }
+  } else {
+    html += `<div class="v-actions">
+      <button class="btn" onclick="prev()" style="flex:1">⏮</button>
+      <button class="btn" onclick="togglePlay()" style="flex:1">${paused ? '▶' : '⏸'}</button>
+      <button class="btn" onclick="pjNext()" style="flex:1">⏭</button>
+    </div>`;
+  }
+  html += `<div class="section">Voz e comandos</div>
+    <div class="v-grid">
+      <div class="v-card ${state.djVoice ? 'on' : ''}" onclick="djVoiceToggle()"><div class="v-ic">🗣</div><div class="v-l">Voz</div><div class="v-s">${state.djVoice ? 'Ligada' : 'Desligada'}</div></div>
+      <div class="v-card ${state.djMic ? 'on' : ''}" onclick="pjMicToggle()"><div class="v-ic">🎙</div><div class="v-l">Microfone</div><div class="v-s">${state.djMic ? 'Ouvindo…' : 'Comandos de voz'}</div></div>
+      <div class="v-card ${state.djLocutor ? 'on' : ''}" onclick="djLocutorToggle()"><div class="v-ic">🎧</div><div class="v-l">Locutora</div><div class="v-s">${state.djLocutor ? 'Ligada' : 'Curiosidade a cada música'}</div></div>
+      <div class="v-card ${state.sleepEnd ? 'on' : ''}" onclick="djSleep(30)"><div class="v-ic">💤</div><div class="v-l">Sono</div><div class="v-s">${state.sleepEnd ? 'Desliga em breve' : 'Timer de 30 min'}</div></div>
+      <div class="v-card" onclick="djPiada()"><div class="v-ic">😄</div><div class="v-l">Piada</div><div class="v-s">Virgem conta uma</div></div>
+      <div class="v-card" onclick="djCuriosidade()"><div class="v-ic">💡</div><div class="v-l">Curiosidade</div><div class="v-s">Sobre a banda atual</div></div>
+    </div>`;
+  if (!hasSongs) {
+    html += `<div class="empty"><div class="big">🎧</div>A Virgin precisa de músicas para tocar.<br><button class="btn" onclick="$('fileSongs').click()">＋ Importar músicas</button></div>`;
+  }
+  list.innerHTML = html;
+  if (now) renderArt($('vnow-art'), now, '');
+  updateVirginMood();
+}
+
 const WORLD_FEED = () => `🎧 Mais ouvidas da semana: ${[26, 24, 22, 20, 18].map((n) => '★ ' + n % 7).join(' · ')}.`;
-function djCuriosidade() { djCuriosidade(); }
 function djMix(vibe) {
   let pool = state.songs.filter((s) => !s.type || s.type !== 'video');
   if (!pool.length) { toast('Importe músicas para a Virgin mixar.'); return; }
@@ -1412,6 +1710,7 @@ function djMix(vibe) {
   playCurrent();
   openPlayer();
   $('p-dj').style.color = 'var(--primary)';
+  renderVirgin();
   djSpeak(msg);
 }
 function pjMicToggle() {
@@ -1440,12 +1739,14 @@ function pjMicToggle() {
   };
   r.onend = () => { if (state.djMic) setTimeout(restart, 400); };
   djSpeak('Oi! Eu sou a Virgin. Estou ouvindo: fale Virgin, próxima música.');
+  renderVirgin();
   restart();
 }
 function stopDjMic() {
   state.djMic = false;
   $('p-djmic').style.color = 'var(--text)';
   if (state.sr) { try { state.sr.stop(); } catch (e) {} state.sr = null; }
+  renderVirgin();
 }
 function djNorm(t) {
   return String(t).toLowerCase()
@@ -1637,11 +1938,11 @@ function prev() {
 }
 audio.addEventListener('ended', () => { if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next(); });
 audio.addEventListener('timeupdate', updateProgress);
-audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateVirginMood(); });
+audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateVirginMood(); });
 video.addEventListener('timeupdate', updateProgress);
-video.addEventListener('play', renderPlayer);
-video.addEventListener('pause', renderPlayer);
+video.addEventListener('play', () => { renderPlayer(); updateVirginMood(); });
+video.addEventListener('pause', () => { renderPlayer(); updateVirginMood(); });
 video.addEventListener('ended', () => {
   if (state.current && state.current.type === 'video') { closePlayer(); return; }
   if (state.queue.length) next();
