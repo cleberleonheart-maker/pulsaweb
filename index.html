@@ -1263,7 +1263,21 @@ function djVoiceToggle() {
   $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
   if (state.djVoice) djSpeak('Oi! Eu sou a Virgin, sua DJ virtual!');
 }
-function djAnnounceTrack(s) { if (s) djSpeak('Agora tocando: ' + (s.artist ? s.artist + ', ' : '') + (s.title || '') + '.'); }
+function djAnnounceTrack(s) {
+  if (!s) return;
+  djSpeak('Agora tocando: ' + (s.artist ? s.artist + ', ' : '') + (s.title || '') + '.');
+  const st = djLearnGet(s.id);
+  if (state.djMode && Math.random() < 0.4) {
+    const comments = [
+      'Essa é umas boas!',
+      'Tipo essa eu gosto de tocar.',
+      'Boa escolha da máquina, né?',
+      'Essa vai longe na balada.'
+    ];
+    const pick = state.favs.has(s.id) ? 'Essa é das suas favoritas!' : comments[Math.floor(Math.random() * comments.length)];
+    setTimeout(() => { if (state.djMode) djSpeak(pick); }, 2800);
+  }
+}
 function djEngine(pool) {
   const set = pool.slice();
   if (!set.length) return [];
@@ -1298,9 +1312,94 @@ function djEngine(pool) {
   }
   return out.concat(remaining);
 }
-function djMix() {
-  const pool = state.songs.filter(s => !s.type || s.type !== 'video');
+const VIRGIN_JOKES = [
+  'Por que o DJ não paga o aluguel? Porque ele sempre vive no tempo. Ah, essa foi ruim, né?',
+  'O que o DJ falou para o microfone? Você me tem. Determinada presença!',
+  'Por que o celular foi ao psicólogo? Porque ele tinha muita memória curto-prazo.',
+  'Qual a tecla favorita do pianista? A de escapar.',
+  'O que o zero disse para o oito? Cinto legal, hein!',
+  'Por que a minhoca não entra na balada? Porque não tem coluna. Parte pro sertanejo, ai!',
+  'Como o tomate cumprimenta o pepino? Fala, colega!',
+  'Por que o computador foi ao médico? Porque estava sem memória.',
+  'O que é um ponto no meio do oceano? Uma bolha saindo para dar uma volta.',
+  'Por que a guitarra não ficou com a bateria? Porque ela ouviu que a bateria só faz barulho.',
+  'Como se chama o primo do morcego? Soturno. Achei essa profunda!',
+  'Por que o livro não assiste TV? Porque tem medo das séries.',
+  'O que o pato disse para a pata? Vem quá!',
+  'Por que o elétricista odeia sexta-feira? Porque é o dia do fio. Eu paro.',
+  'Por que o café foi ao psiquiatra? Porque estava muito moído por dentro.'
+];
+function djPiada() {
+  const msg = VIRGIN_JOKES[Math.floor(Math.random() * VIRGIN_JOKES.length)];
+  djSpeak(msg);
+  toast('😄 Virgem contando piada!');
+}
+const VIRGIN_FACTS = [
+  'Sabia que a música mais ouvida do mundo é "Shape of You" do Ed Sheeran? Mais de três bilhões de plays. Ela deve ter um replay forte!',
+  'Você sabia que as músicas ficam presas na cabeça porque o cérebro repete o refrão sozinho? A culpa é da sua cabeça, não minha!',
+  'Sabia que os Beatles gravaram a música mais curta da história da banda, com um minuto e meio? Tudo a ver com a nossa vibe.',
+  'Curiosidade: o primeiro DJ da história surgiu na década de quarenta, quando o rádio ainda era tudo. Vem de longe essa profissão, hein!',
+  'Sabia que ouvir música enquanto faz tarefas melhora a concentração? Bom, se não melhorar, pelo menos fica mais divertido.',
+  'Curiosidade: o som viaja a 340 metros por segundo no ar. Mas quando cai a balada, parece que ele chega na hora certa.',
+  'Sabia que o fone de ouvido foi inventado para marinheiros em 1910? Depois virou companheiro de balada pra todo mundo.',
+  'Você sabia que uma música pop média tem três minutos e meio? Tempo suficiente pra você curtir e a gente emendar já a próxima.',
+  'Curiosidade: o vinil voltou a vender mais que o CD em 2020. O analógico tem um charme que o digital não mata.',
+  'Sabia que existem mais de cem milhões de músicas disponíveis hoje? Imagina eu mixando tudo isso! Dava uma festa infinita.'
+];
+function djCuriosidade() {
+  const cur = state.current;
+  const banda = cur && (cur.artist || cur.album || '').trim();
+  const msg = VIRGIN_FACTS[Math.floor(Math.random() * VIRGIN_FACTS.length)];
+  djSpeak(banda
+    ? 'Curiosidade sobre a banda ' + banda + '. ' + msg
+    : 'Curiosidade da Virgin. ' + msg);
+  toast('🥸 Curiosidade sobre a banda!');
+}
+function djSleep(min) {
+  const m = Math.max(1, Math.min(180, +(min || 30)));
+  state.sleepEnd = Date.now() + m * 60000;
+  djSpeak('Beleza! Vou desligar a música daqui a ' + m + ' minutos. Boa noite já adiantada.');
+  setTimeout(() => {
+    if (state.sleepEnd && Date.now() < state.sleepEnd) return;
+    djExit();
+    pauseAudio();
+    state.sleepEnd = null;
+    djSpeak('Hora de dormir! Desliguei a música. Até amanhã.');
+  }, m * 60000);
+}
+function djLocutorToggle() {
+  state.djLocutor = !state.djLocutor;
+  const c = $('p-djvoice');
+  if (c) c.style.color = state.djLocutor ? 'var(--primary)' : 'var(--text)';
+  djSpeak(state.djLocutor
+    ? 'Modo locutor ativado! Agora eu apresento cada música como uma locutora de rádio de verdade, e trago uma curiosidade sobre a banda a cada cinco minutos.'
+    : 'Modo locutor desativado. Voltamos ao modo DJ normal.');
+  if (state.djLocutor) djFactTimerStart(); else djFactTimerStop();
+}
+let djFactTimer = null;
+function djFactTimerStart() {
+  djFactTimerStop();
+  djFactTimer = setInterval(() => {
+    if (state.djMode && state.djLocutor) djCuriosidade();
+  }, 5 * 60 * 1000);
+  setTimeout(() => { if (state.djLocutor && state.djMode) djCuriosidade(); }, 20000);
+}
+function djFactTimerStop() {
+  if (djFactTimer) { clearInterval(djFactTimer); djFactTimer = null; }
+}
+const WORLD_FEED = () => `🎧 Mais ouvidas da semana: ${[26, 24, 22, 20, 18].map((n) => '★ ' + n % 7).join(' · ')}.`;
+function djCuriosidade() { djCuriosidade(); }
+function djMix(vibe) {
+  let pool = state.songs.filter((s) => !s.type || s.type !== 'video');
   if (!pool.length) { toast('Importe músicas para a Virgin mixar.'); return; }
+  let msg = 'Olá! Eu sou a Virgin, sua DJ virtual. Bora! Vou tocar ' + pool.length + ' músicas para você.';
+  if (vibe === 'bombar' || vibe === 'festa') {
+    const fav = pool.filter((s) => state.favs.has(s.id));
+    if (fav.length) { pool = fav; msg = 'Bora bombar! Vou tocar só as suas favoritas.'; }
+    else msg = 'Bora bombar! Você ainda não escolheu favoritas, então vou misturar tudo de bom.';
+  } else if (vibe === 'relaxar') {
+    msg = 'Relaxa que eu cuido da trilha sonora. Vou deixar um clima leve pra você.';
+  }
   stopRadio(true);
   state.djMode = true;
   state.shuffle = false;
@@ -1313,7 +1412,7 @@ function djMix() {
   playCurrent();
   openPlayer();
   $('p-dj').style.color = 'var(--primary)';
-  djSpeak('Olá! Eu sou a Virgin, sua DJ virtual. Bora! Vou tocar ' + state.queue.length + ' músicas para você.');
+  djSpeak(msg);
 }
 function pjMicToggle() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -1356,7 +1455,11 @@ function djNorm(t) {
 function djCommand(raw) {
   const norm = djNorm(raw);
   const hasWake = /virgin|virgem|virgene|vargin/.test(norm);
-  const action = /mix|mistura|mixa/.test(norm) ? 'mix'
+  const action = /bombar|bomb|festa|balada|anima/.test(norm) ? 'bombar'
+    : /relaxa|relaxar|calma|calm|tranquil|light/.test(norm) ? 'relaxar'
+    : /piada|zoeira|conta|engracad|sorri/.test(norm) ? 'piada'
+    : /timer|dormi|dormir|sleep|deslig|apaga.*(min|minuto)/.test(norm) ? 'timer'
+    : /mix|mistura|mixa/.test(norm) ? 'mix'
     : /odia|odeio|nao gostei|nao curti/.test(norm) ? 'dislike'
     : /duplicad|repetid/.test(norm) ? 'dupes'
     : /pula|pular|pule|skip/.test(norm) ? 'skip'
@@ -1373,6 +1476,9 @@ function djCommand(raw) {
   if (!action) { djSpeak('Desculpa, não entendi. Tente: Virgin, próxima música.'); return; }
   const cur = state.current;
   switch (action) {
+    case 'bombar': djSpeak('Bora bombar! Preparando o set pra você.'); setTimeout(() => djMix('bombar'), 1500); break;
+    case 'relaxar': djSpeak('Pode relaxar. Deixa comigo o clima.'); setTimeout(() => djMix('relaxar'), 1500); break;
+    case 'piada': djPiada(); break;
     case 'mix': djSpeak('Claro! Preparando um mix novo para você.'); setTimeout(djMix, 1500); break;
     case 'dislike':
       djMarkDislike();
