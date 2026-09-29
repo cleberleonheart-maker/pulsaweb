@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#B388FF">
+<meta name="description" content="Política de Privacidade do Pulsa, aplicativo de reproduction de música.">
+<title>Política de Privacidade · Pulsa</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root {
+  --bg: #0B0F2A;
+  --surface: rgba(20,26,58,.55);
+  --primary: #00E5FF;
+  --primary-dark: #0088CC;
+  --text: #EAF6FF;
+  --text2: #9DB4D5;
+  --divider: rgba(0,229,255,.14);
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+body {
+  margin: 0;
+  padding: 0;
+  background:
+    radial-gradient(1200px 600px at 12% -8%, rgba(0,229,255,.16), transparent 60%),
+    radial-gradient(1100px 700px at 108% 16%, rgba(255,47,214,.15), transparent 60%),
+    var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 760px; margin: 0 auto; padding: 40px 22px 72px; }
+a { color: var(--primary); }
+h1 {
+  font-size: 30px;
+  line-height: 1.25;
+  margin: 8px 0 6px;
+  letter-spacing: .2px;
+}
+.sub { color: var(--text2); font-size: 14px; margin: 0 0 4px; }
+h2 {
+  font-size: 19px;
+  margin: 38px 0 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--divider);
+}
+p, li { font-size: 15.5px; color: var(--text); }
+p.lead { color: var(--text2); font-size: 15.5px; }
+ul { padding-left: 20px; }
+li { margin: 7px 0; }
+li strong { color: var(--text); }
+.callout {
+  background: var(--surface);
+  border-left: 3px solid var(--primary);
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin: 20px 0;
+  font-size: 15px;
+}
+.callout p { margin: 0; }
+pre {
+  background: var(--surface);
+  padding: 12px 14px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13.5px;
+  color: var(--text2);
+  margin: 12px 0;
+}
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  color: var(--text2);
+}
+footer {
+  margin-top: 48px;
+  padding-top: 18px;
+  border-top: 1px solid var(--divider);
+  color: var(--text2);
+  font-size: 13.5px;
+}
+footer a { text-decoration: none; }
+@media (max-width: 480px) {
+  h1 { font-size: 25px; }
+  .wrap { padding: 28px 18px 56px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Política de Privacidade</h1>
+<p class="sub">Pulsa · aplicativo Android de reprodução de música · versão 5.9.3</p>
+
+<p class="lead">Esta política explica quais dados o Pulsa coleta, por que coleta e o que
+você pode fazer com eles. Ela é curta de propósito: o resumo é que o Pulsa funciona
+no seu aparelho e não tem servidor de contas.</p>
+
+<div class="callout">
+<p><strong>Resumo:</strong> o Pulsa não tem servidor próprio. O e-mail da sua conta
+Google fica guardado apenas no seu aparelho. O app pede acesso ao microfone só para
+reconhecer músicas, e faz isso somente quando você toca no botão de reconhecer.</p>
+</div>
+
+<h2>1. Dados da conta Google</h2>
+
+<p>Se você entrar com o Google, o app recebe e guarda o seu endereço de e-mail. O
+Google em si é quem autentica você — o Pulsa nunca vê sua senha do Google, e não tem
+acesso à sua agenda, e-mails ou documentos.</p>
+
+<p>O e-mail é gravado no armazenamento interno do aplicativo, no aparelho, sob forma de
+identificador da conta local. A senha dessa conta local não é a sua senha do Google: o
+app gera uma senha aleatória e armazena apenas o resultado da criptografia (SHA-256 com
+sal), de modo que a senha em si nunca fica guardada. O arquivo fica nos
+<pre><code>pulsa_account</code></pre>
+que só o próprio Pulsa consegue ler, dentro do diretório privado do app.</p>
+
+<p>Esse e-mail <strong>não é enviado para nenhum servidor</strong>. Ele existe para o app
+saber quem está logado no aparelho. Você pode apagá-lo a qualquer momento desinstalando o
+aplicativo.</p>
+
+<h2>2. Verificação do login</h2>
+
+<p>Para confirmar o login, o app envia o token de identificação ao endpoint oficial do
+Google, <code>oauth2.googleapis.com</code>, e confere se o token pertence a este
+aplicativo. Essa verificação não passa por servidores do Pulsa, e é a mesma troca de dados
+que qualquer aplicativo faz ao usar "Entrar com o Google".</p>
+
+<h2>3. Microfone e reconhecimento de músicas</h2>
+
+<p>O Pulsa tem um recurso de reconhecer a música que está tocando. Esse recurso
+<strong>só funciona com o microfone ligado por você</strong>, e nunca é ativado
+sozinho: o app não grava em segundo plano.</p>
+
+<p>Quando você usa o recurso, um trecho de áudio de poucos segundos é capturado e enviado
+ao serviço de identificação de músicas Audd.io, que devolve o nome da faixa, do artista e
+do álbum. O áudio é transmitido apenas durante o reconhecimento e não fica guardado pelo
+Pulsa. O app não arquiva nem armazena gravações de microfone.</p>
+
+<p>Se você preferir não enviar áudio para terceiros, não use o botão de reconhecer. O
+resto do aplicativo — tocar músicas, rádio e vídeos da sua pasta — funciona sem
+microfone.</p>
+
+<h2>4. Música, vídeos e favoritos</h2>
+
+<p>O app lê os arquivos de áudio e vídeo que já estão no seu aparelho para tocar e para
+montar sua biblioteca. Esses arquivos <strong>não saem do aparelho</strong>: a leitura
+acontece localmente, e o app não envia o conteúdo das suas músicas para lugar nenhum.
+Favoritos, playlists e o histórico de reprodução também ficam apenas no aparelho.</p>
+
+<h2>5. Conexões com a internet</h2>
+
+<p>O app se conecta à internet para buscar e reproduzir o conteúdo que você escolhe. As
+conexões que acontecem são:</p>
+
+<ul>
+<li><strong>Rádio:</strong> para tocar uma estação, o app se conecta direto à emissora
+que você selecionou. Ao procurar estações, ele consulta o diretório público
+<code>radio-browser.info</code>, enviando apenas o nome digitado na busca.</li>
+<li><strong>Atualizações:</strong> o app consulta periodicamente o endereço
+<code>cleberleonheart-maker.github.io/pulsaweb/version</code> para saber se existe uma
+versão nova disponível. Essa consulta não envia nenhum dado seu.</li>
+<li><strong>Login e reconhecimento:</strong> os serviços descritos nas seções 2 e 3.</li>
+</ul>
+
+<p>Nenhuma dessas conexões envia o seu e-mail, sua senha ou o conteúdo das suas músicas.</p>
+
+<h2>6. Permissões</h2>
+
+<p>As permissões que o Pulsa pede existem para uma função específica, e nenhuma é usada
+para coleta de dados:</p>
+
+<ul>
+<li><strong>Microfone</strong> — reconhecer a música que está tocando (seção 3).</li>
+<li><strong>Leitura de músicas e vídeos</strong> — listar e tocar os arquivos do seu
+aparelho (seção 4).</li>
+<li><strong>Acesso a fotos e arquivos</strong> — escolher capas e imagens da galeria,
+quando você usa essa opção.</li>
+<li><strong>Controle de energia</strong> — manter a música tocando com a tela apagada e
+exibir as controles na notificação.</li>
+</ul>
+
+<h2>7. Dados de crianças</h2>
+
+<p>O Pulsa não é voltado para crianças e não coleta deliberadamente dados de crianças.
+Se você acredita que uma criança cadastrou uma conta sem supervisão, entre em contato
+pelos dados abaixo.</p>
+
+<h2>8. Alterações nesta política</h2>
+
+<p>Esta política pode ser atualizada quando o app ganhar funcionalidades que mudem a
+forma de tratar dados. A data no topo da página indica a última atualização.</p>
+
+<h2>9. Contato</h2>
+
+<p>Dúvidas sobre privacidade ou pedidos de exclusão de dados podem ser enviados para
+o e-mail de suporte informado no momento do cadastro da conta Google do aplicativo.</p>
+
+<footer>
+<p>Pulsa · aplicativo Android · <a href="index.html">voltar ao site</a></p>
+</footer>
+
+</div>
+</body>
+</html>
