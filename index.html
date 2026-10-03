@@ -184,6 +184,23 @@ input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 
 .pc.primary { color: var(--primary); }
 .pc.big { font-size: 44px; width: 74px; height: 74px; }
 
+/* Equalizador */
+#fx-panel { max-height: 78vh; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.fx-row { display: flex; align-items: center; gap: 12px; padding: 9px 4px; }
+.fx-row .fx-lbl { flex: 0 0 52px; font-size: 11px; color: var(--text2); letter-spacing: .4px; }
+.fx-row .fx-val { flex: 0 0 46px; text-align: right; font-size: 12px; color: var(--primary); font-variant-numeric: tabular-nums; }
+.fx-bands { display: flex; gap: 4px; align-items: flex-end; padding: 10px 2px 4px; }
+.fx-band { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; }
+.fx-bar { position: relative; width: 100%; height: 92px; display: flex; align-items: center; justify-content: center; }
+.fx-bar .fx-zero { position: absolute; left: 0; right: 0; height: 1px; background: var(--divider); }
+/* Com writing-mode vertical o eixo longo vira a ALTURA: a barra mede 92px
+   para cima e 20px de trilho, que é o inverso do que o flex esperaria. */
+.fx-bar input[type=range] { position: relative; writing-mode: vertical-lr; direction: rtl; width: 20px; height: 92px; flex: none; }
+.fx-band .fx-freq { font-size: 9px; color: var(--text2); }
+.fx-presets { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 0 2px; }
+.fx-chip { background: var(--surface-v); color: var(--text2); border: 1px solid var(--divider); border-radius: 999px; padding: 7px 13px; font-size: 12.5px; font-weight: 600; cursor: pointer; }
+.fx-chip.on { color: var(--primary); border-color: var(--primary); }
+
 /* Dialogs */
 #modal-wrap { position: fixed; inset: 0; z-index: 30; background: rgba(0,0,0,.6); display: none; align-items: flex-end; justify-content: center; }
 #modal-wrap.show { display: flex; }
@@ -523,6 +540,7 @@ html:not(.light) .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite;
     <button class="pc big primary" id="p-play" onclick="togglePlay()">▶</button>
     <button class="pc" onclick="pjNext()">⏭</button>
     <button class="pc primary" id="p-repeat" onclick="toggleRepeat()">🔁</button>
+    <button class="pc" id="p-eq" onclick="fxOpen()" title="Equalizador">🎚</button>
     <button class="pc" id="p-dj" onclick="djMix()" title="DJ Virgin">🎛</button>
     <button class="pc" id="p-djvoice" onclick="djVoiceToggle()" title="Voz da DJ Virgin">🗣</button>
     <button class="pc" id="p-djmic" onclick="pjMicToggle()" title="Comando de voz (Virgin)">🎙</button>
@@ -559,6 +577,7 @@ const state = {
   radioActive: null, radioStatus: 'stopped',
   amb: { id: null, vol: 0.4, playing: false },
   phone: { dev: '', online: false, state: null, songs: null, syncing: false },
+  fx: { on: false, preset: 'default', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eightD: false, eightDDepth: 0.7, eightDRate: 0.35 },
   db: null
 };
 
@@ -1263,6 +1282,210 @@ function renderAmb() {
   };
 }
 
+// ---------- EFX: equalizador + 8D ----------
+// Grafo: <audio> -> MediaElementSource -> preamp -> 10 peaking -> panner -> saída.
+// O equalizador do Android (AudioFx.kt) usa 5 pontos de curva expandidos para as
+// bandas do aparelho; aqui as 10 bandas são reais, fixas, e a curva é aplicada direto.
+const FX_FREQS = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+const FX_PRESETS = {
+  padrao: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+  grave: [-4, -2, 0, 3, 5, 6, 5, 4, 3, 2],
+  voz: [-3, -2, 2, 6, 3, -2, -3, -2, 0, 1],
+  agudo: [-5, -3, 0, 2, 4, 7, 8, 7, 5, 3],
+  rock: [4, 3, 1, -1, 1, 3, 5, 5, 4, 3],
+  dance: [1, 0, -3, -4, -1, 3, 6, 6, 5, 4],
+  pop: [-2, -1, 1, 3, 2, 0, 1, 0, -1, -1],
+  jazz: [3, 2, 0, 1, 2, 2, 1, 3, 3, 2],
+  acustico: [-1, 1, 3, 4, 3, 2, 2, 1, 0, 0],
+  classico: [3, 2, 1, 0, -1, -2, -1, 2, 3, 2],
+  loudness: [3, 1, 0, 0, 1, 3, 4, 4, 3, 2],
+  karaoke: [-2, -6, -6, -3, -1, 0, 1, 2, 2, 2],
+  auto: null // resolvido por gênero, ver fxPresetForGenre
+};
+const FX_LABELS = {
+  padrao: 'Padrão', grave: 'Grave', voz: 'Vozes', agudo: 'Agudo', rock: 'Rock',
+  dance: 'Dance', pop: 'Pop', jazz: 'Jazz', acustico: 'Acústico',
+  classico: 'Clássico', loudness: 'Loudness', karaoke: 'Karaokê', auto: 'Automático'
+};
+// Mesmo mapeamento de gênero do AudioFx.kt (fm), normalizado para o web.
+const FX_GENRES = [
+  [/rock|metal|punk|grunge|heavy|hard|indie|alternative|screamo|emo|post/, 'rock'],
+  [/dance|electro|edm|electronic|eletronic|eletronico|techno|house|trance|dubstep|club|disco/, 'dance'],
+  [/pop/, 'pop'],
+  [/jazz|blues|bossa|soul|funk|r&b|rb|rhythm|swing|lounge|smooth|classical|classic|orquestra|sinfonia/, 'jazz'],
+  [/acustico|acoustic|unplugged|folk|sertanejo|violao|vocal/, 'voz'],
+  [/rap|hiphop|hip hop|trap|reggae|dub|dancehall|bass|drill|grime|rnb/, 'grave'],
+  [/gospel|louvor|worship|adorac/, 'voz']
+];
+let fxCtx = null, fxSrc = null, fxPreamp = null, fxPanner = null, fxLfo = null, fxLfoGain = null;
+let fxFilters = [];
+
+function fxEnsureCtx() {
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) { toast('Áudio não suportado neste navegador.'); return false; }
+  if (!fxCtx) {
+    fxCtx = new AC();
+    // A cadeia é montada completa na primeira vez e nunca é desmontada:
+    // createMediaElementSource só pode ser chamado uma vez por elemento, e
+    // qualquer nó desconectado deixa a saída muda para sempre.
+    fxSrc = fxCtx.createMediaElementSource(audio);
+    fxPreamp = fxCtx.createGain();
+    fxPanner = fxCtx.createStereoPanner();
+    fxSrc.connect(fxPreamp);
+    for (const f of FX_FREQS) {
+      const b = fxCtx.createBiquadFilter();
+      b.type = 'peaking';
+      b.frequency.value = f;
+      b.Q.value = 1.1;
+      b.gain.value = 0;
+      fxPreamp.connect(b);
+      fxFilters.push(b);
+    }
+    fxFilters[0].type = 'lowshelf';
+    fxFilters[fxFilters.length - 1].type = 'highshelf';
+    fxFilters[fxFilters.length - 1].connect(fxPanner);
+    fxPanner.connect(fxCtx.destination);
+    // 8D: LFO modulando o pan. O app faz LFO de volume porque o ExoPlayer
+    // 1.3.1 não tem pan estéreo; aqui StereoPannerNode faz o pan de verdade.
+    fxLfo = fxCtx.createOscillator();
+    fxLfo.type = 'sine';
+    fxLfo.frequency.value = 0.35;
+    fxLfoGain = fxCtx.createGain();
+    fxLfoGain.gain.value = 0;
+    fxLfo.connect(fxLfoGain);
+    fxLfoGain.connect(fxPanner.pan);
+    fxLfo.start();
+  }
+  if (fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
+  return true;
+}
+function fxNorm(s) {
+  return String(s || '').toLowerCase()
+    .replace(/[áàâãä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i')
+    .replace(/[óòôõö]/g, 'o').replace(/[úùûü]/g, 'u').replace(/ç/g, 'c');
+}
+function fxPresetForGenre(genre) {
+  const g = fxNorm(genre);
+  if (!g) return null;
+  for (const [re, key] of FX_GENRES) if (re.test(g)) return key;
+  return null;
+}
+function fxCurve(presetKey) {
+  if (presetKey === 'karaoke') return FX_PRESETS.karaoke.slice();
+  const p = FX_PRESETS[presetKey || 'padrao'] || FX_PRESETS.padrao;
+  return p.slice();
+}
+function fxApply() {
+  const f = state.fx;
+  if (!fxCtx) return;
+  const target = f.on ? f.bands : FX_PRESETS.padrao;
+  fxFilters.forEach((b, i) => {
+    const v = Number(target[i] || 0);
+    if (b.gain.value !== v) b.gain.value = v;
+  });
+  const depth = f.on && f.eightD ? f.eightDDepth : 0;
+  if (fxLfoGain.gain.value !== depth) fxLfoGain.gain.value = depth;
+  if (fxLfo.frequency.value !== f.eightDRate) fxLfo.frequency.value = f.eightDRate;
+}
+function fxApplyForSong(s) {
+  const f = state.fx;
+  if (f.preset !== 'auto') return;
+  // No web não há tag de gênero: usa álbum + artista, que é o que o usuário tem.
+  const key = fxPresetForGenre([s && s.album, s && s.artist].filter(Boolean).join(' '));
+  // Calcula sempre, mesmo sem AudioContext: o grafo só nasce quando o usuário
+  // mexe no equalizador, e o estado precisa ficar certo para quando isso acontecer.
+  f.bands = fxCurve(key || 'padrao');
+  fxApply();
+}
+function fxSetPreset(key) {
+  const f = state.fx;
+  f.preset = key;
+  f.on = true;
+  if (key !== 'auto') f.bands = fxCurve(key);
+  fxEnsureCtx();
+  fxApply();
+  if (key === 'auto') fxApplyForSong(state.current);
+  persistFx();
+  renderPlayer();
+}
+function fxToggle8D() {
+  const f = state.fx;
+  f.eightD = !f.eightD;
+  fxEnsureCtx();
+  fxApply();
+  persistFx();
+  renderPlayer();
+}
+function persistFx() {
+  if (state.db) putKV('fx', state.fx);
+}
+function fxOpen() {
+  const f = state.fx;
+  const list = $('modal');
+  const chips = Object.keys(FX_LABELS).map((k) =>
+    `<button class="fx-chip ${f.preset === k ? 'on' : ''}" onclick="fxSetPreset('${k}')">${FX_LABELS[k]}</button>`).join('');
+  const bands = FX_FREQS.map((fq, i) => {
+    const v = Number(f.bands[i] || 0);
+    const label = fq >= 1000 ? (fq / 1000) + 'k' : fq;
+    return `<div class="fx-band">
+      <div class="fx-bar"><div class="fx-zero"></div>
+        <input type="range" min="-12" max="12" step="1" value="${v}" data-fx-band="${i}" aria-label="${label} Hz">
+      </div>
+      <div class="fx-freq">${label}</div>
+    </div>`;
+  }).join('');
+  list.innerHTML = `<h3>Equalizador</h3>
+    <div id="fx-panel">
+      <div class="mrow" onclick="fxSetEnabled(!state.fx.on)">
+        <span class="art grad-c">🎚</span><div class="mid">
+        <div class="it-title">Ativar equalizador</div>
+        <div class="it-sub">${f.on ? 'Ligado' : 'Desligado'}</div></div>
+        <span style="color:var(--primary);font-size:18px">${f.on ? '✓' : '○'}</span>
+      </div>
+      <div class="section">Preset</div>
+      <div class="fx-presets">${chips}</div>
+      <div class="section">Bandas (dB)</div>
+      <div class="fx-bands">${bands}</div>
+      <div class="fx-row"><span class="fx-lbl">8D</span>
+        <div style="flex:1"><input type="range" id="fx-depth" min="0" max="1" step="0.05" value="${f.eightDDepth}"></div>
+        <span class="fx-val">${Math.round(f.eightDDepth * 100)}%</span>
+      </div>
+      <div class="fx-row"><span class="fx-lbl">Veloc.</span>
+        <div style="flex:1"><input type="range" id="fx-rate" min="0.05" max="2" step="0.05" value="${f.eightDRate}"></div>
+        <span class="fx-val">${f.eightDRate.toFixed(2)}Hz</span>
+      </div>
+      <div class="mrow" onclick="fxToggle8D()">
+        <span class="art grad-b">🌀</span><div class="mid">
+        <div class="it-title">8D (pan giratório)</div>
+        <div class="it-sub">Use fone · o som roda de um lado para o outro</div></div>
+        <span style="color:var(--primary);font-size:18px">${f.eightD ? '✓' : '○'}</span>
+      </div>
+      <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button></div>
+    </div>`;
+  list.querySelectorAll('[data-fx-band]').forEach((el) => {
+    el.oninput = () => {
+      const i = +el.dataset.fxBand;
+      state.fx.bands[i] = +el.value;
+      state.fx.on = true;
+      fxApply();
+      persistFx();
+    };
+  });
+  const d = $('fx-depth');
+  if (d) d.oninput = () => { state.fx.eightDDepth = +d.value; fxApply(); persistFx(); d.nextElementSibling.textContent = Math.round(d.value * 100) + '%'; };
+  const r = $('fx-rate');
+  if (r) r.oninput = () => { state.fx.eightDRate = +r.value; fxApply(); persistFx(); r.nextElementSibling.textContent = (+r.value).toFixed(2) + 'Hz'; };
+  $('modal-wrap').classList.add('show');
+}
+function fxSetEnabled(v) {
+  state.fx.on = !!v;
+  if (state.fx.on) fxEnsureCtx();
+  fxApply();
+  persistFx();
+  fxOpen();
+  renderPlayer();
+}
+
 // ---------- Tabs ----------
 function selectTab(tab, updateDetail) {
   state.tab = tab;
@@ -1858,6 +2081,7 @@ function playCurrent() {
   video.style.display = 'none';
   audio.src = objUrl(s);
   audio.play().then(() => updateMediaSession()).catch(() => {});
+  if (fxCtx) fxApplyForSong(s);
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
     if (djEntered) djEntered = false;
@@ -1938,7 +2162,15 @@ function prev() {
 }
 audio.addEventListener('ended', () => { if (state.repeat === 1 || state.queueIndex < state.queue.length - 1) next(); });
 audio.addEventListener('timeupdate', updateProgress);
-audio.addEventListener('play', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; updateVirginMood(); });
+audio.addEventListener('play', () => {
+  // Uma vez criado, o createMediaElementSource desvia o <audio> para o grafo
+  // para sempre: se o contexto ficar suspenso (aba em segundo plano, iOS),
+  // o som sai mudo. Resume a cada play, que é onde o usuário percebe.
+  if (fxCtx && fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
+  renderPlayer();
+  if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing';
+  updateVirginMood();
+});
 audio.addEventListener('pause', () => { renderPlayer(); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; updateVirginMood(); });
 video.addEventListener('timeupdate', updateProgress);
 video.addEventListener('play', () => { renderPlayer(); updateVirginMood(); });
@@ -2022,9 +2254,11 @@ function renderPlayer() {
   $('mini-shuffle').style.color = state.shuffle ? 'var(--primary)' : 'var(--text)';
   $('p-dj').style.color = state.djMode ? 'var(--primary)' : 'var(--text)';
   $('p-djvoice').style.color = state.djVoice ? 'var(--primary)' : 'var(--text)';
-  $('p-djmic').style.color = state.djMic ? 'var(--primary)' : 'var(--text)';
+$('p-djmic').style.color = state.djMic ? 'var(--primary)' : 'var(--text)';
+  if ($('p-eq')) $('p-eq').style.color = (state.fx.on || state.fx.eightD) ? 'var(--primary)' : 'var(--text)';
   updateProgress();
   syncMini();
+  return;
 }
 function syncMini() {
   if (state.radioActive) {
@@ -2446,6 +2680,15 @@ async function init() {
   if (theme) { state.theme = theme; applyTheme(); }
   const amb = await getKV('amb');
   if (amb) { state.amb = Object.assign(state.amb, amb); state.amb.playing = false; }
+  const fx = await getKV('fx');
+  if (fx) {
+    state.fx = Object.assign(state.fx, fx);
+    if (!Array.isArray(state.fx.bands) || state.fx.bands.length !== FX_FREQS.length) {
+      state.fx.bands = fxCurve(state.fx.preset);
+    } else {
+      state.fx.bands = state.fx.bands.map((v) => Number(v) || 0);
+    }
+  }
   const idx = await getKV('lastSong');
   if (idx && state.songs.length) {
     state.queue = state.songs;
