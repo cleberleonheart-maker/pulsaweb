@@ -2602,6 +2602,12 @@ function phonePrev() { sendCmd('prev'); }
 function phoneNext() { sendCmd('next'); }
 function phoneSeekNow(v) { sendCmd('seek', Math.round(+v * 1000)); }
 function phoneVolume(v) { sendCmd('volume', Math.round(+v * 100)); }
+function psName(x) { return (((x.artist ? x.artist + ' - ' : '') + (x.title || '')) || '').trim(); }
+function phonePlaySong(name) {
+  if (!name) return;
+  sendCmd('play_song', name);
+  toast('Tocando no celular: ' + name);
+}
 function phoneReload() {
   pollRemote().then(() => toast('Lista do celular atualizada.'));
 }
@@ -2653,12 +2659,12 @@ function renderPhone() {
     </div>
   </div>`;
 
-  html += `<div class="section">Fila no celular${q.length ? ' · ' + q.length : ''}</div>
+  html += `<div class="section">Ouvir juntos · fila no celular${q.length ? ' · ' + q.length : ''}</div>
   <div class="phone-clist" id="phone-queue">`;
   if (q.length) {
     q.slice(0, 20).forEach((x, i) => {
       const active = cur && cur.id === x.id;
-      html += `<div class="item${active ? ' play' : ''}">
+      html += `<div class="item${active ? ' play' : ''}" data-song="${esc(psName(x))}" onclick="phonePlaySong(this.dataset.song)">
         <div class="art small grad-${'abcde'[i % 5]}"></div>
         <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')}</div></div>
         <span style="color:var(--text2);font-size:12px">${fmtClock(x.durationMs)}</span>
@@ -2669,12 +2675,12 @@ function renderPhone() {
   }
   html += `</div>`;
 
-  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''}</div>
+  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''} <span style="font-weight:400;color:var(--text2)">— toque para tocar no celular</span></div>
   <div id="phone-songs">`;
   if (songs.length) {
     const list = songs.slice(0, 50);
     for (const x of list) {
-      html += `<div class="item">
+      html += `<div class="item" data-song="${esc(psName(x))}" onclick="phonePlaySong(this.dataset.song)">
         <div class="art small">${esc(initials((x.album && x.album !== UNKNOWN ? x.album : x.title) || '?'))}</div>
         <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')} · ${fmtClock(x.durationMs)}</div></div>
       </div>`;
