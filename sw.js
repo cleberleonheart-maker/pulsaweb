@@ -1,4 +1,4 @@
-const CACHE = 'pulsa-web-v4';
+const CACHE = 'pulsa-web-v5';
 const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', (e) => {
