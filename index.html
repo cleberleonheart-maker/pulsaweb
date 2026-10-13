@@ -2599,7 +2599,8 @@ async function pollRemote() {
 async function sendCmd(cmd, value) {
   try {
     await fetch(REMOTE + '/cmd', {
-      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cmd, value })
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ cmd, value, dev: (state.phone && state.phone.dev) || undefined })
     });
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
 }
