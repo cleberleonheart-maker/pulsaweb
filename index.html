@@ -462,6 +462,11 @@ html:not(.light) .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite;
     <button class="tbtn" id="addPlaylistBtn" onclick="addPlaylist()" title="Nova playlist">＋</button>
     <div id="profile-avatar" onclick="showProfile()">P</div>
   </header>
+  <div id="token-banner" style="display:none;align-items:center;gap:8px;margin:8px 12px 0;padding:10px 12px;border-radius:12px;background:var(--surface2);border:1px solid var(--divider);font-size:13px;color:var(--text)">
+    <span>🔑 Token do servidor:</span>
+    <input id="token-banner-input" type="text" placeholder="cole o token" style="flex:1;min-width:0;background:var(--surface);border:1px solid var(--divider);color:var(--text);border-radius:10px;padding:7px 10px;font-size:13px;outline:none">
+    <button onclick="saveBannerToken()">Salvar</button>
+  </div>
   <main id="main">
     <div id="search-wrap"><input type="search" id="search" placeholder="Buscar músicas, artistas…" autocomplete="off"></div>
     <section class="tab active" id="tab-virgin">
@@ -587,7 +592,8 @@ const $ = (id) => document.getElementById(id);
 const audio = $('audio'), video = $('video');
 const radioAudio = $('radioAudio');
 const UNKNOWN = 'Desconhecido';
-const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
+const SERVER_ORIGIN = 'https://pulsa.3.151.24.62.sslip.io';
+const REMOTE = (location.protocol.startsWith('http') && !/github\.io$/.test(location.hostname)) ? location.origin : SERVER_ORIGIN;
 
 // Identidade da página no telemetria: cria a sessão, publica /state e escuta /cmd
 // para poder ser comandada por outro Pulsa (celular controlando a web).
@@ -2725,6 +2731,21 @@ function promptWebToken() {
   localStorage.setItem('pulsa_web_token', t);
   WEB_TOKEN = t;
   WEB_SESSION_ERR = '';
+  updateTokenBanner();
+  bootWebSession();
+}
+function updateTokenBanner() {
+  const b = $('token-banner');
+  if (b) b.style.display = WEB_TOKEN ? 'none' : 'flex';
+}
+function saveBannerToken() {
+  const el = $('token-banner-input');
+  const t = (el && el.value || '').trim();
+  if (!t) { toast('Cole o token do servidor'); return; }
+  localStorage.setItem('pulsa_web_token', t);
+  WEB_TOKEN = t;
+  WEB_SESSION_ERR = '';
+  updateTokenBanner();
   bootWebSession();
 }
 function webCurrentEl() {
@@ -2867,6 +2888,7 @@ async function init() {
     if (i >= 0) { state.queueIndex = i; playCurrent(); syncMini(); }
   }
   renderAll();
+  updateTokenBanner();
   startPhonePoll();
   bootWebSession();
   setInterval(webPushState, 3000);
