@@ -2569,7 +2569,7 @@ function phoneStatusLine() {
   const dev = (p.dev || '').slice(0, 8);
   const app = p.state && p.state.app ? ' · Pulsa ' + p.state.app : '';
   if (p.online) return `<span class="dot on" style="display:inline-block"></span> Celular conectado (${esc(dev)}${app})`;
-  return '<span class="dot" style="display:inline-block"></span> Celular offline — abra o Pulsa no Android';
+  return '<span class="dot" style="display:inline-block"></span> Celular offline — abra o Pulsa no Android' + (p.reason ? ' <span style="opacity:.7">(' + esc(p.reason) + ')</span>' : '');
 }
 function phonePlaying() {
   const s = state.phone.state;
@@ -2578,15 +2578,17 @@ function phonePlaying() {
 async function pollRemote() {
   try {
     const r = await fetch(REMOTE + '/remote', { cache: 'no-store', headers: authHeaders() });
-    if (!r.ok) throw new Error('!ok');
+    if (!r.ok) { state.phone.online = false; state.phone.reason = (r.status === 401 ? 'token errado/ausente' : 'erro ' + r.status + ' em ' + location.host); renderPhone(); return; }
     const d = await r.json();
     state.phone.dev = d.dev || '';
     state.phone.state = d.state || null;
     state.phone.songs = d.songs && d.songs.songs ? d.songs.songs : null;
     state.phone.online = !!(d.state && d.state.ts && Date.now() / 1000 - d.state.ts < 20);
+    state.phone.reason = state.phone.online ? '' : 'celular sem enviar estado';
     renderPhone();
   } catch (e) {
     state.phone.online = false;
+    state.phone.reason = 'sem conexão com ' + REMOTE.replace(/^https?:\/\//, '');
     renderPhone();
   }
 }
