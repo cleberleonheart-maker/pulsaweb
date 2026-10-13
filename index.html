@@ -306,6 +306,8 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
 }
 #phone-view .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--text2); flex-shrink: 0; }
 #phone-view .dot.on { background: #5CD859; box-shadow: 0 0 8px #5CD859; }
+#phone-view .ptip { font-size: 12px; color: var(--text2); background: var(--surface2); border-radius: 10px; padding: 8px 10px; margin: 0 0 12px; }
+#phone-view .ptip b { color: var(--primary); }
 #phone-view .phone-song { display: flex; align-items: center; gap: 12px; }
 #phone-view .phone-song .art { width: 54px; height: 54px; }
 #phone-view .phone-song .it-title { font-size: 16px; }
@@ -586,6 +588,20 @@ const audio = $('audio'), video = $('video');
 const radioAudio = $('radioAudio');
 const UNKNOWN = 'Desconhecido';
 const REMOTE = (location.protocol.startsWith('http') ? location.origin : '') || 'http://192.168.100.7:8081';
+
+// Identidade da página no telemetria: cria a sessão, publica /state e escuta /cmd
+// para poder ser comandada por outro Pulsa (celular controlando a web).
+let WEB_ID = localStorage.getItem('pulsa_web_id');
+if (!WEB_ID) {
+  WEB_ID = 'web-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+  localStorage.setItem('pulsa_web_id', WEB_ID);
+}
+let WEB_CODE = localStorage.getItem('pulsa_web_code') || '';
+function devFetch(path, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({ 'X-Pulsa-Device': WEB_ID }, opts.headers || {});
+  return fetch(REMOTE + path, opts);
+}
 
 const RADIO_STATIONS = [
   { name: 'Itaramã FM 97.1', genre: 'Hits / Litoral Gaúcho', url: 'https://player.voxhd.com.br/proxy/7716' },
@@ -2579,6 +2595,10 @@ function renderPhone() {
   let html = `<div class="phone-card">
     <div class="phone-status">${phoneStatusLine()}</div>`;
 
+  if (WEB_CODE) {
+    html += `<div class="ptip">🔗 Sessão desta tela: <b>${esc(WEB_CODE)}</b> — controle de qualquer Pulsa (Configurações → Controle de sessão).</div>`;
+  }
+
   if (cur) {
     const playing = phonePlaying();
     html += `<div class="phone-song">
@@ -2658,6 +2678,123 @@ function startPhonePoll() {
   pollRemote();
 }
 
+// ---------- Web como player comandável (controle de outro Pulsa) ----------
+async function bootWebSession() {
+  try {
+    const r = await devFetch('/session', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"create":true}'
+    });
+    if (!r.ok) return;
+    const d = await r.json();
+    if (d && d.code && d.code !== WEB_CODE) {
+      WEB_CODE = d.code;
+      localStorage.setItem('pulsa_web_code', WEB_CODE);
+      renderPhone();
+    }
+  } catch (e) {}
+}
+function webCurrentEl() {
+  if (state.radioActive) return radioAudio;
+  if (!state.current) return null;
+  return state.current.type === 'video' ? video : audio;
+}
+function webCurrentTrack() {
+  if (!state.current) return null;
+  const el = webCurrentEl();
+  return {
+    id: state.current.id || 0,
+    title: state.current.title || state.current.name || '',
+    artist: state.current.artist || '',
+    album: state.current.album && state.current.album !== UNKNOWN ? state.current.album : '',
+    durationMs: Math.round((el && el.duration ? el.duration : 0) * 1000)
+  };
+}
+async function webPushState() {
+  if (!state.current && !state.radioActive) return;
+  let playing = false;
+  const el = webCurrentEl();
+  if (state.radioActive) playing = !radioAudio.paused;
+  else if (el && el.src) playing = !el.paused;
+  const body = {
+    playing: playing,
+    current: state.current ? webCurrentTrack() : null,
+    positionMs: Math.round(((el && el.src ? el.currentTime : 0) || 0) * 1000),
+    volume: Math.round((audio.volume || 0) * 100),
+    app: 'web'
+  };
+  try {
+    await devFetch('/state', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    });
+  } catch (e) {}
+}
+function normStr(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+}
+function webResolve(q) {
+  const qq = String(q || '').trim();
+  if (!qq) return null;
+  let artist = '', title = qq;
+  const i = qq.lastIndexOf(' - ');
+  if (i >= 0) { artist = qq.slice(0, i); title = qq.slice(i + 3); }
+  const pool = state.songs.filter((s) => !s.type || s.type !== 'video');
+  const a = normStr(artist), t = normStr(title);
+  if (a) {
+    let hit = pool.find((s) => normStr(s.artist) === a && normStr(s.title) === t);
+    if (!hit) hit = pool.find((s) => normStr(s.artist) === a);
+    if (hit) return hit;
+  }
+  let hit = pool.find((s) => normStr(s.title) === t);
+  if (!hit) hit = pool.find((s) => normStr(s.title).indexOf(t) >= 0);
+  return hit || null;
+}
+function webStart(song) {
+  stopRadio(true);
+  state.queue = [song];
+  state.queueIndex = 0;
+  playCurrent();
+  openPlayer();
+}
+function webExec(cmd, value) {
+  try {
+    const c = String(cmd || '').toLowerCase();
+    if (c === 'toggle') { if (state.radioActive || state.current) togglePlay(); }
+    else if (c === 'play') {
+      if (state.radioActive) { if (radioAudio.paused) radioAudio.play(); }
+      else if (state.current) { const el = webCurrentEl(); if (el && el.src && el.paused) el.play().catch(() => {}); }
+    }
+    else if (c === 'pause') {
+      if (state.radioActive) { if (!radioAudio.paused) stopRadio(false); }
+      else if (state.current) { const el = webCurrentEl(); if (el && el.src && !el.paused) el.pause(); }
+    }
+    else if (c === 'next') { if (!state.radioActive) next(); }
+    else if (c === 'prev') { if (!state.radioActive) prev(); }
+    else if (c === 'seek') {
+      const ms = Number(value) || 0;
+      if (state.current) { const el = webCurrentEl(); if (el && el.src) el.currentTime = ms / 1000; }
+    }
+    else if (c === 'shuffle') { state.shuffle = !!value; renderPlayer(); }
+    else if (c === 'repeat') { state.repeat = (Number(value) || 0) % 3; renderPlayer(); }
+    else if (c === 'volume') {
+      if (value != null) { const v = Math.max(0, Math.min(1, (Number(value) || 0) / 100)); audio.volume = v; video.volume = v; radioAudio.volume = v; }
+    }
+    else if (c === 'play_song') { const s = webResolve(value); if (s) webStart(s); }
+    else if (c === 'play_rewind') {
+      const arr = Array.isArray(value) ? value : [value];
+      const got = arr.map((x) => webResolve(x)).filter(Boolean);
+      if (got.length) { stopRadio(true); state.queue = got; state.queueIndex = 0; playCurrent(); openPlayer(); }
+    }
+  } catch (e) {}
+}
+async function pollWebCmds() {
+  try {
+    const r = await devFetch('/cmd', { cache: 'no-store' });
+    if (!r.ok) return;
+    const arr = await r.json();
+    for (const o of (arr || [])) webExec(o.cmd, o.value);
+  } catch (e) {}
+}
+
 // ---------- Boot ----------
 async function reloadAll() {
   state.songs = await getAll('songs');
@@ -2697,6 +2834,9 @@ async function init() {
   }
   renderAll();
   startPhonePoll();
+  bootWebSession();
+  setInterval(webPushState, 3000);
+  setInterval(pollWebCmds, 3000);
   if (navigator.serviceWorker && navigator.serviceWorker.register) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
