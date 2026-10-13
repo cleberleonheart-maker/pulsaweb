@@ -2117,7 +2117,10 @@ function playCurrent() {
   video.removeAttribute('src');
   video.style.display = 'none';
   audio.src = objUrl(s);
-  audio.play().then(() => updateMediaSession()).catch(() => {});
+  if (fxCtx && fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
+  audio.play().then(() => updateMediaSession()).catch((e) => {
+    toast('Não tocou 😕 ' + (e && e.name ? e.name : 'erro') + (e && e.message ? ': ' + e.message : '') + ' — tente outro formato (mp3/m4a/ogg)');
+  });
   if (fxCtx) fxApplyForSong(s);
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
@@ -2166,7 +2169,8 @@ function togglePlay() {
   if (!state.current) return;
   const el = state.current.type === 'video' ? video : audio;
   if (el.src) {
-    if (el.paused) el.play(); else el.pause();
+    if (el.paused) el.play().catch((e) => toast('Não tocou 😕 ' + (e && e.name ? e.name : 'erro')));
+    else el.pause();
   }
   renderPlayer();
 }
@@ -2910,6 +2914,9 @@ async function init() {
   document.addEventListener('pointerdown', function djWelcome() {
     if (state.djVoice) djSpeak('Bem-vindo(a) ao Pulsa! Eu sou a Virgin, sua DJ virtual.');
   }, { once: true, passive: true });
+  document.addEventListener('pointerdown', () => {
+    if (fxCtx && fxCtx.state === 'suspended') fxCtx.resume().catch(() => {});
+  }, { passive: true });
 }
 function registerTabs() {
   $('fileSongs').onchange = (e) => { if (e.target.files.length) importFiles([...e.target.files], 'song'); e.target.value = ''; };
