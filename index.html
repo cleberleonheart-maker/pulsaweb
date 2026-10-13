@@ -2642,7 +2642,7 @@ function renderPhone() {
     <div class="phone-status">${phoneStatusLine()}</div>`;
 
   if (WEB_CODE) {
-    html += `<div class="ptip">🔗 Sessão desta tela: <b>${esc(WEB_CODE)}</b> — controle de qualquer Pulsa (Configurações → Controle de sessão).</div>`;
+    html += `<div class="ptip">🔗 Sessão desta tela: <b>${esc(WEB_CODE)}</b> — no celular, toque junto em: Configurações → Ouvir juntos → Entrar e digite este código.</div>`;
   } else if (!WEB_TOKEN) {
     html += `<div class="ptip">🔑 Este navegador ainda não tem o token. <button onclick="promptWebToken()">Inserir token</button> para ativar a sessão/controle.</div>`;
   } else if (WEB_SESSION_ERR) {
