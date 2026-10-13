@@ -2125,6 +2125,7 @@ function playCurrent() {
     toast('Não tocou 😕 ' + (e && e.name ? e.name : 'erro') + (e && e.message ? ': ' + e.message : '') + ' — tente outro formato (mp3/m4a/ogg)');
   });
   if (fxCtx) fxApplyForSong(s);
+  fwdCmd('play_song', psName(state.current));
   if (state.djMode) {
     if (s.id !== djLastId) { djLearnSet(s.id, { plays: djLearnGet(s.id).plays + 1 }); djLastId = s.id; }
     if (djEntered) djEntered = false;
@@ -2172,8 +2173,8 @@ function togglePlay() {
   if (!state.current) return;
   const el = state.current.type === 'video' ? video : audio;
   if (el.src) {
-    if (el.paused) el.play().catch((e) => toast('Não tocou 😕 ' + (e && e.name ? e.name : 'erro')));
-    else el.pause();
+    if (el.paused) { el.play().catch((e) => toast('Não tocou 😕 ' + (e && e.name ? e.name : 'erro'))); fwdCmd('play'); }
+    else { el.pause(); fwdCmd('pause'); }
   }
   renderPlayer();
 }
@@ -2607,6 +2608,12 @@ async function sendCmd(cmd, value) {
     });
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
 }
+let fwdSuppress = false;
+function fwdCmd(cmd, value) {
+  if (fwdSuppress) return;
+  if (!state.phone || !state.phone.online) return;
+  sendCmd(cmd, value);
+}
 function phonePlay() { sendCmd('toggle'); }
 function phonePrev() { sendCmd('prev'); }
 function phoneNext() { sendCmd('next'); }
@@ -2617,7 +2624,7 @@ function phonePlaySong(name) {
   if (!name) return;
   sendCmd('play_song', name);
   const local = (typeof webResolve === 'function') ? webResolve(name) : null;
-  if (local) { webStart(local); toast('Tocando juntos: ' + name); }
+  if (local) { fwdSuppress = true; webStart(local); fwdSuppress = false; toast('Tocando juntos: ' + name); }
   else toast('Tocando no celular: ' + name + ' — (esta música não está importada no site, então a web não toca junto)');
 }
 function phoneReload() {
@@ -2832,6 +2839,7 @@ function webStart(song) {
   openPlayer();
 }
 function webExec(cmd, value) {
+  fwdSuppress = true;
   try {
     const c = String(cmd || '').toLowerCase();
     if (c === 'toggle') { if (state.radioActive || state.current) togglePlay(); }
@@ -2860,8 +2868,9 @@ function webExec(cmd, value) {
       const got = arr.map((x) => webResolve(x)).filter(Boolean);
       if (got.length) { stopRadio(true); state.queue = got; state.queueIndex = 0; playCurrent(); openPlayer(); }
     }
-  } catch (e) {}
+  } catch (e) {} finally { fwdSuppress = false; }
 }
+
 async function pollWebCmds() {
   try {
     const r = await devFetch('/cmd', { cache: 'no-store' });
