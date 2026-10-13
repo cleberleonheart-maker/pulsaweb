@@ -2613,7 +2613,9 @@ function psName(x) { return (((x.artist ? x.artist + ' - ' : '') + (x.title || '
 function phonePlaySong(name) {
   if (!name) return;
   sendCmd('play_song', name);
-  toast('Tocando no celular: ' + name);
+  const local = (typeof webResolve === 'function') ? webResolve(name) : null;
+  if (local) { webStart(local); toast('Tocando juntos: ' + name); }
+  else toast('Tocando no celular: ' + name + ' — (esta música não está importada no site, então a web não toca junto)');
 }
 function phoneReload() {
   pollRemote().then(() => toast('Lista do celular atualizada.'));
