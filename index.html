@@ -597,9 +597,23 @@ if (!WEB_ID) {
   localStorage.setItem('pulsa_web_id', WEB_ID);
 }
 let WEB_CODE = localStorage.getItem('pulsa_web_code') || '';
+// Token compartilhado com o servidor (X-Pulsa-Token). NÃO fica embutido na página:
+// abra uma vez com ?token=SEU_TOKEN e ele fica salvo no navegador (localStorage).
+function tokenFromUrl() {
+  try {
+    const q = new URLSearchParams(location.search);
+    const h = new URLSearchParams((location.hash || '').replace(/^#/, ''));
+    return q.get('token') || h.get('token') || '';
+  } catch (e) { return ''; }
+}
+let WEB_TOKEN = tokenFromUrl() || localStorage.getItem('pulsa_web_token') || '';
+if (tokenFromUrl()) localStorage.setItem('pulsa_web_token', tokenFromUrl());
+function authHeaders(extra) {
+  return Object.assign({ 'X-Pulsa-Token': WEB_TOKEN }, extra || {});
+}
 function devFetch(path, opts) {
   opts = opts || {};
-  opts.headers = Object.assign({ 'X-Pulsa-Device': WEB_ID }, opts.headers || {});
+  opts.headers = authHeaders(Object.assign({ 'X-Pulsa-Device': WEB_ID }, opts.headers || {}));
   return fetch(REMOTE + path, opts);
 }
 
@@ -2556,7 +2570,7 @@ function phonePlaying() {
 }
 async function pollRemote() {
   try {
-    const r = await fetch(REMOTE + '/remote', { cache: 'no-store' });
+    const r = await fetch(REMOTE + '/remote', { cache: 'no-store', headers: authHeaders() });
     if (!r.ok) throw new Error('!ok');
     const d = await r.json();
     state.phone.dev = d.dev || '';
@@ -2572,7 +2586,7 @@ async function pollRemote() {
 async function sendCmd(cmd, value) {
   try {
     await fetch(REMOTE + '/cmd', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cmd, value })
+      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }), body: JSON.stringify({ cmd, value })
     });
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
 }
