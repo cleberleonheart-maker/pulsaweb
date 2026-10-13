@@ -2612,6 +2612,8 @@ function renderPhone() {
 
   if (WEB_CODE) {
     html += `<div class="ptip">🔗 Sessão desta tela: <b>${esc(WEB_CODE)}</b> — controle de qualquer Pulsa (Configurações → Controle de sessão).</div>`;
+  } else if (!WEB_TOKEN) {
+    html += `<div class="ptip">🔑 Este navegador ainda não tem o token. <button onclick="promptWebToken()">Inserir token</button> para ativar a sessão/controle.</div>`;
   } else if (WEB_SESSION_ERR) {
     html += `<div class="ptip">🔑 ${esc(WEB_SESSION_ERR)}</div>`;
   }
@@ -2716,6 +2718,14 @@ async function bootWebSession() {
       renderPhone();
     }
   } catch (e) { WEB_SESSION_ERR = 'Sem conexão com o servidor'; renderPhone(); }
+}
+function promptWebToken() {
+  const t = (prompt('Cole o token do servidor:') || '').trim();
+  if (!t) return;
+  localStorage.setItem('pulsa_web_token', t);
+  WEB_TOKEN = t;
+  WEB_SESSION_ERR = '';
+  bootWebSession();
 }
 function webCurrentEl() {
   if (state.radioActive) return radioAudio;
