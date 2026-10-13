@@ -326,6 +326,9 @@ html.light #drop-overlay { background: rgba(124,77,255,.15); color: var(--primar
   color: var(--text2); font-size: 14px;
 }
 #phone-view .phone-clist { margin-top: 6px; }
+.psearch-wrap { position: sticky; top: 0; z-index: 9; padding: 4px 0 8px; background: var(--bg); }
+.psearch { width: 100%; box-sizing: border-box; background: var(--surface); border: 1px solid var(--divider); color: var(--text); border-radius: 22px; padding: 10px 16px; font-size: 15px; outline: none; }
+.psearch:focus { border-color: var(--primary); }
 #phone-view .phone-clist .item { padding: 8px; }
 #phone-view .phone-clist .item.play { background: var(--surface-v); border: 1px solid var(--divider); border-radius: 12px; }
 #phone-view .elink {
@@ -497,6 +500,7 @@ html:not(.light) .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite;
       <div class="list" id="amb-list"></div>
     </section>
     <section class="tab" id="tab-phone">
+      <div class="psearch-wrap"><input id="phone-search" class="psearch" placeholder="🔎 Buscar música no celular…" autocomplete="off" oninput="phoneSearchInput(this.value)"></div>
       <div class="list" id="phone-view"></div>
     </section>
     <section class="tab" id="tab-detail">
@@ -2633,11 +2637,15 @@ function phoneReload() {
 function renderPhone() {
   const cv = $('phone-view');
   if (!cv) return;
+  const scroller = document.querySelector('main');
+  const scrollY = scroller ? scroller.scrollTop : 0;
   const p = state.phone;
   const s = p.state || {};
   const cur = s.current || null;
   const q = s.queue && s.queue.length ? s.queue : [];
-  const songs = p.songs || [];
+  const allSongs = p.songs || [];
+  const pq = normStr(state.phoneQuery || '');
+  const songs = pq ? allSongs.filter((x) => normStr(psName(x)).indexOf(pq) >= 0) : allSongs;
   let html = `<div class="phone-card">
     <div class="phone-status">${phoneStatusLine()}</div>`;
 
@@ -2694,17 +2702,20 @@ function renderPhone() {
   }
   html += `</div>`;
 
-  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''} <span style="font-weight:400;color:var(--text2)">— toque para tocar no celular</span></div>
+  html += `<div class="section">Músicas do celular${songs.length ? ' · ' + songs.length : ''}${pq ? ' · busca' : ''} <span style="font-weight:400;color:var(--text2)">— toque para tocar no celular</span></div>
   <div id="phone-songs">`;
   if (songs.length) {
-    const list = songs.slice(0, 50);
+    const cap = pq ? 300 : 50;
+    const list = songs.slice(0, cap);
     for (const x of list) {
       html += `<div class="item" data-song="${esc(psName(x))}" onclick="phonePlaySong(this.dataset.song)">
         <div class="art small">${esc(initials((x.album && x.album !== UNKNOWN ? x.album : x.title) || '?'))}</div>
         <div class="mid"><div class="it-title">${esc(x.title)}</div><div class="it-sub">${esc(x.artist || '')} · ${fmtClock(x.durationMs)}</div></div>
       </div>`;
     }
-    if (songs.length > 50) html += `<div class="elink" style="padding:10px" onclick="phoneReload()">+ ${songs.length - 50} mais — atualizar lista</div>`;
+    if (songs.length > cap) html += `<div class="elink" style="padding:10px" onclick="phoneReload()">+ ${songs.length - cap} mais — refine a busca</div>`;
+  } else if (pq) {
+    html += `<div class="empty" style="padding:16px 8px">Nada encontrado para <b>${esc(state.phoneQuery)}</b>.</div>`;
   } else {
     html += `<div class="empty" style="padding:16px 8px">O celular ainda não enviou a biblioteca. Aguarde o app sincronizar.</div>`;
   }
@@ -2721,6 +2732,11 @@ function renderPhone() {
     let t = 0;
     vl.oninput = () => { clearTimeout(t); t = setTimeout(() => phoneVolume(vl.value), 250); };
   }
+  if (scroller) scroller.scrollTop = scrollY;
+}
+function phoneSearchInput(v) {
+  state.phoneQuery = v || '';
+  renderPhone();
 }
 function startPhonePoll() {
   clearInterval(phoneTimer);
