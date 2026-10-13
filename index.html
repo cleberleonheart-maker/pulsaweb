@@ -822,7 +822,7 @@ async function importFiles(fileList, kind) {
     const b = it.blob || {};
     existing.add((b.lastModified || it.createdAt || 0) + '|' + (b.size || it.sizeBytes || 0) + '|' + it.name);
   }
-  let added = 0, skipped = 0;
+  let added = 0, skipped = 0, failed = 0, lastErr = '';
   toast(`Importando ${fileList.length} arquivos…`);
   for (const file of fileList) {
     const key = (file.lastModified || 0) + '|' + file.size + '|' + file.name;
@@ -830,8 +830,8 @@ async function importFiles(fileList, kind) {
     existing.add(key);
     try {
       if (kind === 'song') {
-        const meta = await metadataOf(file);
-        const dur = await durationOf(file, false);
+        const meta = await metadataOf(file).catch(() => ({}));
+        const dur = await durationOf(file, false).catch(() => 0);
         await putSong({
           id: 's' + (file.lastModified) + '-' + Math.random().toString(36).slice(2, 8),
           title: meta.title || file.name, artist: meta.artist || 'Artista desconhecido',
@@ -841,7 +841,7 @@ async function importFiles(fileList, kind) {
           type: 'song', createdAt: Date.now(), blob: file, name: file.name
         });
       } else {
-        const dur = await durationOf(file, true);
+        const dur = await durationOf(file, true).catch(() => 0);
         await putVideo({
           id: 'v' + Math.random().toString(36).slice(2, 10),
           title: file.name.replace(/\.[^.]+$/, '').trim(), durationMs: dur,
@@ -849,10 +849,13 @@ async function importFiles(fileList, kind) {
         });
       }
       added++;
-    } catch (e) { console.warn('falha ao importar', file.name, e); }
+    } catch (e) { failed++; lastErr = (e && (e.name || e.message)) || String(e); console.warn('falha ao importar', file.name, e); }
   }
   await reloadAll();
-  toast(`Importadas ${added} ${kind === 'song' ? 'músicas' : 'vídeos'}${skipped ? ` (${skipped} duplicada${skipped === 1 ? '' : 's'} ignorada${skipped === 1 ? '' : 's'})` : ''}.`);
+  let msg = `Importadas ${added} ${kind === 'song' ? 'músicas' : 'vídeos'}`;
+  if (skipped) msg += ` (${skipped} duplicada${skipped === 1 ? '' : 's'})`;
+  if (failed) msg += ` — ${failed} falharam: ${lastErr}`;
+  toast(msg + '.');
   if (added && kind === 'song') buildAlbums();
 }
 function putSong(s) { return new Promise((res, rej) => { const r = tx('songs', 'readwrite').put(s); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
