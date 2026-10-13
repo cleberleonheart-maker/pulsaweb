@@ -597,6 +597,7 @@ if (!WEB_ID) {
   localStorage.setItem('pulsa_web_id', WEB_ID);
 }
 let WEB_CODE = localStorage.getItem('pulsa_web_code') || '';
+let WEB_SESSION_ERR = '';
 // Token compartilhado com o servidor (X-Pulsa-Token). NÃO fica embutido na página:
 // abra uma vez com ?token=SEU_TOKEN e ele fica salvo no navegador (localStorage).
 function tokenFromUrl() {
@@ -2611,6 +2612,8 @@ function renderPhone() {
 
   if (WEB_CODE) {
     html += `<div class="ptip">🔗 Sessão desta tela: <b>${esc(WEB_CODE)}</b> — controle de qualquer Pulsa (Configurações → Controle de sessão).</div>`;
+  } else if (WEB_SESSION_ERR) {
+    html += `<div class="ptip">🔑 ${esc(WEB_SESSION_ERR)}</div>`;
   }
 
   if (cur) {
@@ -2698,14 +2701,21 @@ async function bootWebSession() {
     const r = await devFetch('/session', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"create":true}'
     });
-    if (!r.ok) return;
+    if (!r.ok) {
+      WEB_SESSION_ERR = (r.status === 401)
+        ? 'Falta o token — abra esta página com ?token=SEU_TOKEN'
+        : 'Servidor não respondeu (' + r.status + ')';
+      renderPhone();
+      return;
+    }
     const d = await r.json();
     if (d && d.code && d.code !== WEB_CODE) {
       WEB_CODE = d.code;
       localStorage.setItem('pulsa_web_code', WEB_CODE);
+      WEB_SESSION_ERR = '';
       renderPhone();
     }
-  } catch (e) {}
+  } catch (e) { WEB_SESSION_ERR = 'Sem conexão com o servidor'; renderPhone(); }
 }
 function webCurrentEl() {
   if (state.radioActive) return radioAudio;
