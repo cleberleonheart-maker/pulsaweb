@@ -2711,9 +2711,10 @@ async function bootWebSession() {
     });
     if (!r.ok) {
       WEB_SESSION_ERR = (r.status === 401)
-        ? 'Falta o token — abra esta página com ?token=SEU_TOKEN'
+        ? 'Token errado ou ausente — cole o token correto no topo'
         : 'Servidor não respondeu (' + r.status + ')';
       renderPhone();
+      updateTokenBanner();
       return;
     }
     const d = await r.json();
@@ -2722,8 +2723,9 @@ async function bootWebSession() {
       localStorage.setItem('pulsa_web_code', WEB_CODE);
       WEB_SESSION_ERR = '';
       renderPhone();
+      updateTokenBanner();
     }
-  } catch (e) { WEB_SESSION_ERR = 'Sem conexão com o servidor'; renderPhone(); }
+  } catch (e) { WEB_SESSION_ERR = 'Sem conexão com o servidor'; renderPhone(); updateTokenBanner(); }
 }
 function promptWebToken() {
   const t = (prompt('Cole o token do servidor:') || '').trim();
@@ -2736,7 +2738,8 @@ function promptWebToken() {
 }
 function updateTokenBanner() {
   const b = $('token-banner');
-  if (b) b.style.display = WEB_TOKEN ? 'none' : 'flex';
+  if (!b) return;
+  b.style.display = (!WEB_TOKEN || WEB_SESSION_ERR) ? 'flex' : 'none';
 }
 function saveBannerToken() {
   const el = $('token-banner-input');
