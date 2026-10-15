@@ -2659,8 +2659,11 @@ function renderPhone() {
 
   if (cur) {
     const playing = phonePlaying();
+    const phoneArt = cur.cover
+      ? `<img src="${cur.cover}" alt="">`
+      : esc(initials((cur.album && cur.album !== UNKNOWN ? cur.album : cur.title) || '?'));
     html += `<div class="phone-song">
-      <div class="art grad-e" style="width:54px;height:54px;font-size:20px">${esc(initials((cur.album && cur.album !== UNKNOWN ? cur.album : cur.title) || '?'))}</div>
+      <div class="art${cur.cover ? '' : ' grad-e'}" style="width:54px;height:54px;${cur.cover ? '' : 'font-size:20px'}">${phoneArt}</div>
       <div class="mid">
         <div class="it-title">${esc(cur.title)}</div>
         <div class="it-sub">${esc(cur.artist || '')}${cur.album && cur.album !== UNKNOWN ? ' · ' + esc(cur.album) : ''}</div>
