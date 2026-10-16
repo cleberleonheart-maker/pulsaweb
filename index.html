@@ -587,7 +587,7 @@ const state = {
   djMode: false, djVoice: true, djMic: false, learn: {},
   radioActive: null, radioStatus: 'stopped',
   amb: { id: null, vol: 0.4, playing: false },
-  phone: { dev: '', online: false, state: null, songs: null, syncing: false },
+  phone: { dev: '', online: false, state: null, songs: null, syncing: false, cloud: null },
   fx: { on: false, preset: 'default', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eightD: false, eightDDepth: 0.7, eightDRate: 0.35 },
   db: null
 };
@@ -2603,6 +2603,21 @@ async function pollRemote() {
     state.phone.reason = 'sem conexão com ' + REMOTE.replace(/^https?:\/\//, '');
     renderPhone();
   }
+  pollCloud();
+}
+
+// Item 290 (Nuvem de mídia): lê o blob de playlists/favoritas/progresso que o app
+// empurra pra /cloud. Fica separado do /remote porque muda bem mais devagar (minutos,
+// não segundos) — puxar junto desperdiçaria banda a cada 3 s por dados que não mudam.
+async function pollCloud() {
+  if (!WEB_TOKEN) return;
+  try {
+    const r = await devFetch('/cloud', { cache: 'no-store' });
+    if (!r.ok) return;
+    const d = await r.json();
+    state.phone.cloud = d && d.cloud ? d.cloud : null;
+    renderPhone();
+  } catch (e) {}
 }
 async function sendCmd(cmd, value) {
   try {
@@ -2724,6 +2739,8 @@ function renderPhone() {
   }
   html += `</div>`;
 
+  html += cloudSectionHtml();
+
   cv.innerHTML = html;
   const sk = $('phone-seek');
   if (sk) {
@@ -2741,6 +2758,94 @@ function phoneSearchInput(v) {
   state.phoneQuery = v || '';
   renderPhone();
 }
+
+// Item 290 (Nuvem de mídia): favoritas e playlists que o app guardou no servidor.
+// O blob vem em caminhos (o id do MediaStore não sobrevive a um celular novo), mas o
+// player web toca por nome ("artista - título" via play_song) — por isso o app manda
+// junto o mapa `names` caminho -> {title, artist}. Sem esse mapa a web só leria paths.
+//
+// As listas das playlists ficam em [cloudPlaylists] e o clique referencia por índice.
+// Embutir o JSON direto no atributo onclick quebraria com qualquer aspa no nome de faixa
+// (e abriria injeção de HTML) — pelo índice o que vai pro atributo é só um número.
+let cloudPlaylists = [];
+function cloudName(path) {
+  const c = state.phone && state.phone.cloud;
+  if (!c || !c.names) return null;
+  return c.names[path] || null;
+}
+function cloudPlayName(path) {
+  const n = cloudName(path);
+  if (!n) return null;
+  const artist = (n.artist || '').trim();
+  const title = (n.title || '').trim();
+  return artist ? artist + ' - ' + title : title;
+}
+function cloudPlayRewindIdx(i) {
+  const list = cloudPlaylists[i];
+  if (!Array.isArray(list) || !list.length) return;
+  sendCmd('play_rewind', list);
+  toast('Tocando no celular: ' + list.length + ' faixa(s)');
+}
+function cloudSectionHtml() {
+  const c = state.phone && state.phone.cloud;
+  cloudPlaylists = [];
+  if (!c) return '';
+  const favs = (c.favorites || []).slice().sort((a, b) => (b.likedAt || 0) - (a.likedAt || 0));
+  const pls = c.playlists || [];
+  const resume = c.resume || null;
+  if (!favs.length && !pls.length) return '';
+  const totalFav = favs.length;
+  const totalPl = pls.reduce((n, p) => n + ((p.paths || []).length), 0);
+  let html = `<div class="section">☁️ Nuvem de mídia · ${totalFav} favorita(s) · ${totalPl} faixa(s) em ${pls.length} playlist(s)</div>`;
+
+  if (resume && (resume.title || '').trim()) {
+    const rname = (resume.artist || '').trim()
+      ? resume.artist + ' - ' + resume.title
+      : (resume.title || '');
+    html += `<div class="item" data-song="${esc(rname)}" onclick="phonePlaySong(this.dataset.song)">
+      <div class="art small grad-e">▶</div>
+      <div class="mid"><div class="it-title">Continuar de onde parou</div>
+      <div class="it-sub">${esc(resume.title || '')}${resume.artist ? ' · ' + esc(resume.artist) : ''}${resume.positionMs ? ' · ' + fmtClock(resume.positionMs) : ''}</div></div>
+    </div>`;
+  }
+
+  if (totalFav) {
+    html += `<div class="phone-clist" style="margin-top:4px">`;
+    favs.slice(0, 20).forEach((f, i) => {
+      const nm = cloudPlayName(f.path);
+      if (!nm) return;
+      const n = cloudName(f.path) || {};
+      html += `<div class="item" data-song="${esc(nm)}" onclick="phonePlaySong(this.dataset.song)">
+        <div class="art small grad-${'abcde'[i % 5]}">♥</div>
+        <div class="mid"><div class="it-title">${esc(n.title || nm)}</div><div class="it-sub">${esc(n.artist || '')}</div></div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+
+  pls.forEach((pl) => {
+    const paths = (pl.paths || []).filter((p) => cloudPlayName(p));
+    if (!paths.length) return;
+    const list = paths.map(cloudPlayName);
+    const idx = cloudPlaylists.push(list) - 1;
+    html += `<div class="section" style="font-size:12.5px">🎵 ${esc(pl.name || 'Playlist')} · ${paths.length} <span style="font-weight:400;color:var(--text2)">— tocar tudo</span></div>`;
+    html += `<div class="phone-clist">`;
+    paths.slice(0, 20).forEach((p, i) => {
+      const nm = cloudPlayName(p);
+      const n = cloudName(p) || {};
+      html += `<div class="item" data-song="${esc(nm)}" onclick="phonePlaySong(this.dataset.song)">
+        <div class="art small grad-${'abcde'[i % 5]}"></div>
+        <div class="mid"><div class="it-title">${esc(n.title || nm)}</div><div class="it-sub">${esc(n.artist || '')}</div></div>
+      </div>`;
+    });
+    html += `</div>`;
+    // Tocar a playlist inteira de uma vez: manda play_rewind com a lista de nomes, que o
+    // app resolve e põe na fila — é o mesmo caminho do "ouvir juntos".
+    html += `<div class="elink" style="padding:6px 10px" onclick="cloudPlayRewindIdx(${idx})">▶ Tocar "${esc(pl.name || 'Playlist')}" (${list.length})</div>`;
+  });
+  return html;
+}
+
 function startPhonePoll() {
   clearInterval(phoneTimer);
   phoneTimer = setInterval(pollRemote, 3000);
