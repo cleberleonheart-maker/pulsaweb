@@ -455,6 +455,53 @@ html:not(.light) #phone-view .phone-card {
 html:not(.light) .art.ph-flut { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
 html:not(.light) .v-ic { animation: redes-futuro-flut 3.5s ease-in-out infinite; }
 </style>
+<style id="tv-mode">
+/* 10 pés: ligado em navegador de TV ou por ?tv=1 / Perfil > Modo TV. */
+body.tv { font-size: 18px; }
+body.tv header { min-height: 80px; padding: calc(env(safe-area-inset-top, 0px) + 14px) 3vw 10px; gap: 14px; }
+body.tv #title { font-size: 30px; }
+body.tv #back { font-size: 30px; padding: 8px 16px; }
+body.tv #profile-avatar { width: 52px; height: 52px; font-size: 20px; }
+body.tv .tbtn { font-size: 28px; padding: 10px; }
+body.tv #search-wrap { padding: 0 3vw 10px; }
+body.tv #search { font-size: 20px; padding: 13px 22px; }
+body.tv .list { padding: 6px 3vw 28px; max-width: 1180px; margin: 0 auto; }
+body.tv .item { padding: 14px 16px; gap: 18px; border-radius: 16px; }
+body.tv .art { width: 64px; height: 64px; font-size: 24px; border-radius: 14px; }
+body.tv .art.small { width: 52px; height: 52px; }
+body.tv .it-title { font-size: 20px; }
+body.tv .it-sub { font-size: 15px; }
+body.tv .like { font-size: 28px; padding: 10px; }
+body.tv .section { font-size: 14px; padding: 22px 3vw 8px; max-width: 1180px; margin: 0 auto; }
+body.tv nav { padding: 0 2vw; }
+body.tv nav button { font-size: 14px; padding: 10px 4px 12px; }
+body.tv nav button .ic { font-size: 26px; }
+body.tv #mini { padding: 10px 3vw; gap: 16px; }
+body.tv #mini .mm { font-size: 28px; padding: 8px; }
+body.tv #player .p-top { padding: calc(env(safe-area-inset-top, 0px) + 14px) 3vw 0; }
+body.tv #player .p-top button { font-size: 30px; padding: 12px; }
+body.tv #player .p-art { width: min(38vw, 46vh, 440px); margin-top: 3vh; }
+body.tv #player .p-title { font-size: 30px; }
+body.tv #player .p-sub { font-size: 18px; }
+body.tv #player .p-seek { padding: 10px 4vw 0; }
+body.tv #player .pc { font-size: 32px; width: 66px; height: 66px; }
+body.tv #player .pc.big { font-size: 56px; width: 92px; height: 92px; }
+body.tv #player .p-vol { padding: 0 4vw 22px; }
+body.tv #modal-wrap { align-items: center; }
+body.tv #modal { max-width: 720px; border-radius: 24px; padding: 26px 24px; }
+body.tv #modal h3 { font-size: 24px; }
+body.tv #modal .mrow { padding: 16px 6px; font-size: 18px; }
+body.tv #modal input[type=text] { font-size: 20px; padding: 14px; }
+body.tv .btn { font-size: 18px; padding: 14px 28px; }
+body.tv .fx-chip { font-size: 16px; padding: 10px 16px; }
+body.tv #fab { width: 72px !important; height: 72px !important; font-size: 34px !important; right: 3vw !important; }
+body.tv .empty { font-size: 20px; }
+body.tv .empty .big { font-size: 56px; }
+/* Foco do controle: sem hover, o destaque precisa ser óbvio. */
+body.tv :focus { outline: none; }
+body.tv .tv-focus { outline: 3px solid var(--primary); outline-offset: 3px; box-shadow: 0 0 28px rgba(0,229,255,.5), inset 0 0 16px rgba(0,229,255,.08); border-radius: 14px; }
+body.tv .item.tv-focus { transform: translateY(-2px); }
+</style>
 </head>
 <body>
 <div id="bg-anim"></div>
@@ -1009,6 +1056,7 @@ function renderAll() {
   renderAmb();
   renderVirgin();
   if (state.detail) renderDetail();
+  if (typeof tvRestoreFocus === 'function') tvRestoreFocus(false);
 }
 
 // ---------- Rádio ----------
@@ -1540,6 +1588,7 @@ function selectTab(tab, updateDetail) {
   $('addPlaylistBtn').classList.toggle('hidden', tab !== 'playlists');
   $('back').classList.remove('show');
   $('title').textContent = { virgin: 'Virgin', songs: 'Músicas', albums: 'Álbuns', artists: 'Artistas', playlists: 'Playlists', favs: 'Favoritas', videos: 'Vídeos', radio: 'Rádio', amb: 'Som de fundo', phone: 'Celular' }[tab];
+  if (typeof tvRestoreFocus === 'function') tvRestoreFocus(false);
 }
 let detailBackStack = null;
 function openDetail(d) {
@@ -1552,6 +1601,7 @@ function openDetail(d) {
   $('title').textContent = d.name;
   $('addPlaylistBtn').classList.add('hidden');
   renderDetail();
+  if (typeof tvRestoreFocus === 'function') tvRestoreFocus(true);
 }
 function renderDetail() {
   const d = state.detail;
@@ -2356,6 +2406,7 @@ function showProfile() {
     <div class="mrow">Nickname: <input type="text" id="nick-in" value="${esc(state.nick)}" style="width:auto"></div>
     <div class="mrow" onclick="toggleTheme()"><span class="art grad-c">◐</span><div class="mid"><div class="it-title">Tema</div><div class="it-sub">Claro / Escuro</div></div><span id="theme-ic" style="color:var(--primary);font-size:18px">${state.theme === 'light' ? '🌙' : '☀️'}</span></div>
     <div class="mrow" id="apk-row" onclick="downloadApk()" style="margin-top:6px"><span class="art grad-e">🤖</span><div class="mid"><div class="it-title">Pulsa para Android</div><div class="it-sub" id="apk-ver">Verificando…</div></div><span style="color:var(--primary);font-size:20px">⤓</span></div>
+    <div class="mrow" onclick="toggleTvMode()"><span class="art grad-b">TV</span><div class="mid"><div class="it-title">Modo TV (10 pés)</div><div class="it-sub">${PULSA_TV ? 'Ligado · navegue com o controle' : 'Desligado · toque ou teclado'}</div></div><span style="color:var(--primary);font-size:18px">${PULSA_TV ? '✓' : ''}</span></div>
     <div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Fechar</button><button class="btn" onclick="saveNick()">Salvar</button></div>`;
   $('modal-wrap').classList.add('show');
   loadApkInfo().then(() => { const v = $('apk-ver'); if (v && APK_INFO.url) v.textContent = 'Android · versão ' + APK_INFO.ver + ' · tocar para baixar'; });
@@ -3099,6 +3150,198 @@ function createFab() {
   };
   document.body.appendChild(fab);
 }
+// ---------- Modo TV (10 pés) ----------
+// Liga por UA de TV, ?tv=1 ou Perfil > Modo TV (localStorage). ?tv=0 desliga.
+var PULSA_TV = (function () {
+  try {
+    var q = new URLSearchParams(location.search);
+    if (q.get('tv') === '0') return false;
+    if (q.get('tv') === '1') return true;
+    var saved = localStorage.getItem('pulsa.tv');
+    if (saved === '1') return true;
+    if (saved === '0') return false;
+    var ua = navigator.userAgent || '';
+    return /(Tizen|Web0S|webOS|SMART-TV|SmartTV|BRAVIA|AFT[BMN]|Android TV|Google TV|HbbTV|NetCast|Viera|Orsay)/i.test(ua);
+  } catch (e) { return false; }
+})();
+if (PULSA_TV) document.body.classList.add('tv');
+
+function toggleTvMode() {
+  try { localStorage.setItem('pulsa.tv', PULSA_TV ? '0' : '1'); } catch (e) {}
+  location.reload();
+}
+
+function tvFocusables() {
+  var root = document.getElementById('app');
+  if (document.getElementById('modal-wrap').classList.contains('show')) root = document.getElementById('modal');
+  else if (document.getElementById('player').classList.contains('show')) root = document.getElementById('player');
+  if (!root) return [];
+  var sel = 'button, a[href], input, select, textarea, [onclick], .item, .mrow, .v-card';
+  var list = Array.prototype.slice.call(root.querySelectorAll(sel));
+  if (root.matches && root.matches(sel)) list.unshift(root);
+  return list.filter(function (el) {
+    if (el.disabled || el.getAttribute('aria-hidden') === 'true') return false;
+    if (el.tagName === 'INPUT' && el.type === 'hidden') return false;
+    var r = el.getBoundingClientRect();
+    if (r.width < 2 || r.height < 2) return false;
+    if (!el.hasAttribute('tabindex')) el.tabIndex = 0;
+    return true;
+  });
+}
+
+function tvFocus(el) {
+  if (!el) return;
+  var old = document.querySelectorAll('.tv-focus');
+  for (var i = 0; i < old.length; i++) old[i].classList.remove('tv-focus');
+  el.classList.add('tv-focus');
+  try { el.focus({ preventScroll: true }); } catch (e) { el.focus(); }
+  el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+}
+
+function tvMove(dir) {
+  var list = tvFocusables();
+  if (!list.length) return;
+  var cur = document.activeElement;
+  if (list.indexOf(cur) < 0) { tvFocus(list[0]); return; }
+  var cr = cur.getBoundingClientRect();
+  var cx = cr.left + cr.width / 2, cy = cr.top + cr.height / 2;
+  var best = null, bestScore = Infinity;
+  for (var i = 0; i < list.length; i++) {
+    var el = list[i];
+    if (el === cur) continue;
+    var r = el.getBoundingClientRect();
+    var x = r.left + r.width / 2, y = r.top + r.height / 2;
+    var dx = x - cx, dy = y - cy;
+    var primary, secondary;
+    if (dir === 'left') { if (dx > -4) continue; primary = -dx; secondary = Math.abs(dy); }
+    else if (dir === 'right') { if (dx < 4) continue; primary = dx; secondary = Math.abs(dy); }
+    else if (dir === 'up') { if (dy > -4) continue; primary = -dy; secondary = Math.abs(dx); }
+    else { if (dy < 4) continue; primary = dy; secondary = Math.abs(dx); }
+    var score = primary + secondary * 2.4;
+    var overlap = (dir === 'left' || dir === 'right')
+      ? Math.min(cr.bottom, r.bottom) - Math.max(cr.top, r.top)
+      : Math.min(cr.right, r.right) - Math.max(cr.left, r.left);
+    if (overlap > 0) score -= Math.min(overlap, 80) * 1.6;
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  if (best) tvFocus(best);
+}
+
+function tvFirstIn(root) {
+  var list = tvFocusables().filter(function (el) { return root && root.contains(el); });
+  return list[0] || null;
+}
+
+function tvRestoreFocus(force) {
+  if (!PULSA_TV) return;
+  var active = document.activeElement;
+  if (!force && active && active !== document.body && active.isConnected) return;
+  var target = null;
+  if (document.getElementById('modal-wrap').classList.contains('show')) {
+    target = tvFirstIn(document.getElementById('modal'));
+  } else if (document.getElementById('player').classList.contains('show')) {
+    target = document.getElementById('p-play') || tvFirstIn(document.getElementById('player'));
+  } else {
+    var tab = document.querySelector('.tab.active');
+    target = tab ? tvFirstIn(tab) : null;
+    if (!target) target = document.querySelector('nav button.active') || document.querySelector('nav button');
+  }
+  if (target) tvFocus(target);
+}
+
+function tvSeek(delta) {
+  try {
+    var el = (state.current && state.current.type === 'video') ? video : audio;
+    if (!el || !isFinite(el.duration)) return;
+    el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + delta));
+    toast((delta > 0 ? '+' : '') + delta + 's');
+  } catch (e) {}
+}
+
+if (PULSA_TV) {
+  document.addEventListener('focusin', function (e) {
+    var old = document.querySelectorAll('.tv-focus');
+    for (var i = 0; i < old.length; i++) old[i].classList.remove('tv-focus');
+    if (e.target && e.target.classList) e.target.classList.add('tv-focus');
+    if (e.target && e.target.scrollIntoView) e.target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  });
+  document.addEventListener('focusout', function () {
+    setTimeout(function () {
+      if (!document.activeElement || document.activeElement === document.body) {
+        var old = document.querySelectorAll('.tv-focus');
+        for (var i = 0; i < old.length; i++) old[i].classList.remove('tv-focus');
+      }
+    }, 0);
+  });
+
+  document.addEventListener('keydown', function (e) {
+    var t = e.target || {};
+    var tag = (t.tagName || '').toLowerCase();
+    var isField = tag === 'input' || tag === 'textarea' || tag === 'select';
+    var isRange = tag === 'input' && t.type === 'range';
+    var modalOpen = document.getElementById('modal-wrap').classList.contains('show');
+    var playerOpen = document.getElementById('player').classList.contains('show');
+
+    if (e.key === 'Escape' || (e.key === 'Backspace' && !isField) || e.key === 'GoBack' || e.key === 'BrowserBack') {
+      if (modalOpen) { e.preventDefault(); closeModal(); return; }
+      if (playerOpen) { e.preventDefault(); closePlayer(); return; }
+      if (document.getElementById('back').classList.contains('show')) { e.preventDefault(); goBack(); return; }
+      if (e.key === 'Escape' && isField) { e.preventDefault(); t.blur(); }
+      return;
+    }
+    if (isField && !isRange) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        tvMove(e.key === 'ArrowDown' ? 'down' : 'up');
+      }
+      return;
+    }
+    if (isRange) {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+        e.preventDefault();
+        tvMove(e.key === 'ArrowUp' ? 'up' : 'down');
+      } else if (t.id === 'seek' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        e.preventDefault();
+        tvSeek(e.key === 'ArrowLeft' ? -10 : 10);
+      }
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      tvMove({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key]);
+      return;
+    }
+    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+      var el = document.activeElement;
+      if (!el || el === document.body) return;
+      if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.tagName === 'SELECT') return;
+      e.preventDefault();
+      el.click();
+      return;
+    }
+    var media = {
+      MediaPlayPause: function () { if (typeof togglePlay === 'function') togglePlay(); },
+      MediaPlay: function () { if (typeof audio !== 'undefined' && audio.paused && typeof togglePlay === 'function') togglePlay(); },
+      MediaPause: function () { if (typeof audio !== 'undefined' && !audio.paused && typeof togglePlay === 'function') togglePlay(); },
+      MediaTrackNext: function () { if (typeof next === 'function') next(); },
+      MediaTrackPrevious: function () { if (typeof prev === 'function') prev(); },
+      MediaFastForward: function () { tvSeek(10); },
+      MediaRewind: function () { tvSeek(-10); }
+    };
+    if (media[e.key]) { e.preventDefault(); media[e.key](); }
+  });
+
+  // Ao abrir/fechar player ou modal, o foco precisa entrar no painel novo.
+  ['player', 'modal-wrap'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    new MutationObserver(function () { setTimeout(function () { tvRestoreFocus(true); }, 30); })
+      .observe(el, { attributes: true, attributeFilter: ['class'] });
+  });
+
+  setTimeout(function () { tvRestoreFocus(true); }, 400);
+}
+
 init();
 </script>
 </body>
