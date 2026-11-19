@@ -1,10 +1,11 @@
 {
   "name": "Pulsa Web",
   "short_name": "Pulsa",
-  "description": "Player de músicas e vídeos — versão web para iOS e Windows",
+  "description": "Player de músicas e vídeos para celular, computador e TV",
   "start_url": "./index.html",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
   "background_color": "#0B0F2A",
   "theme_color": "#FF2FD6",
   "icons": [

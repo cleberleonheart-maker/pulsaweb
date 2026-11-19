@@ -1,5 +1,5 @@
-const CACHE = 'pulsa-web-v5';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg'];
+const CACHE = 'pulsa-web-v6';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './version'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
@@ -34,6 +34,6 @@ self.addEventListener('fetch', (e) => {
         caches.open(CACHE).then((c) => c.put(e.request, copy)).catch(() => {});
       }
       return res;
-    }).catch(() => caches.match('./index.html')))
+    }).catch(() => new Response('', { status: 504, statusText: 'Offline' })))
   );
 });

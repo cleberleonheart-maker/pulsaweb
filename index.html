@@ -636,7 +636,8 @@ const state = {
   amb: { id: null, vol: 0.4, playing: false },
   phone: { dev: '', online: false, state: null, songs: null, syncing: false, cloud: null },
   fx: { on: false, preset: 'default', bands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0], eightD: false, eightDDepth: 0.7, eightDRate: 0.35 },
-  db: null
+  db: null,
+  mem: { songs: [], videos: [], playlists: [], kv: {} }
 };
 
 const $ = (id) => document.getElementById(id);
@@ -648,12 +649,18 @@ const REMOTE = (location.protocol.startsWith('http') && !/github\.io$/.test(loca
 
 // Identidade da página no telemetria: cria a sessão, publica /state e escuta /cmd
 // para poder ser comandada por outro Pulsa (celular controlando a web).
-let WEB_ID = localStorage.getItem('pulsa_web_id');
+function storageGet(key) {
+  try { return localStorage.getItem(key); } catch (e) { return null; }
+}
+function storageSet(key, value) {
+  try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+}
+let WEB_ID = storageGet('pulsa_web_id');
 if (!WEB_ID) {
   WEB_ID = 'web-' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-  localStorage.setItem('pulsa_web_id', WEB_ID);
+  storageSet('pulsa_web_id', WEB_ID);
 }
-let WEB_CODE = localStorage.getItem('pulsa_web_code') || '';
+let WEB_CODE = storageGet('pulsa_web_code') || '';
 let WEB_SESSION_ERR = '';
 // Token compartilhado com o servidor (X-Pulsa-Token). NÃO fica embutido na página:
 // abra uma vez com ?token=SEU_TOKEN e ele fica salvo no navegador (localStorage).
@@ -664,8 +671,9 @@ function tokenFromUrl() {
     return q.get('token') || h.get('token') || '';
   } catch (e) { return ''; }
 }
-let WEB_TOKEN = tokenFromUrl() || localStorage.getItem('pulsa_web_token') || '';
-if (tokenFromUrl()) localStorage.setItem('pulsa_web_token', tokenFromUrl());
+const WEB_URL_TOKEN = tokenFromUrl();
+let WEB_TOKEN = WEB_URL_TOKEN || storageGet('pulsa_web_token') || '';
+if (WEB_URL_TOKEN) storageSet('pulsa_web_token', WEB_URL_TOKEN);
 function authHeaders(extra) {
   return Object.assign({ 'X-Pulsa-Token': WEB_TOKEN }, extra || {});
 }
@@ -714,12 +722,15 @@ function openDB() {
 }
 function tx(store, mode) { return state.db.transaction(store, mode).objectStore(store); }
 function getAll(store) {
+  if (!state.db) return Promise.resolve(state.mem[store] || []);
   return new Promise((res, rej) => { const r = tx(store).getAll(); r.onsuccess = () => res(r.result || []); r.onerror = () => rej(r.error); });
 }
 function putKV(k, v) {
+  if (!state.db) { state.mem.kv[k] = v; return Promise.resolve(); }
   return new Promise((res, rej) => { const r = tx('kv', 'readwrite').put(v, k); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
 }
 function getKV(k) {
+  if (!state.db) return Promise.resolve(state.mem.kv[k]);
   return new Promise((res) => { const r = tx('kv').get(k); r.onsuccess = () => res(r.result); r.onerror = () => res(undefined); });
 }
 function clearStore(store) {
@@ -742,6 +753,11 @@ function matched(...vals) { return vals.some((v) => String(v || '').toLowerCase(
 function toast(msg) {
   const t = $('toast'); t.textContent = msg; t.classList.add('show');
   clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function pauseAudio() {
+  audio.pause();
+  video.pause();
+  radioAudio.pause();
 }
 
 // ---------- Leitura de metadados (ID3) ----------
@@ -909,9 +925,24 @@ async function importFiles(fileList, kind) {
   toast(msg + '.');
   if (added && kind === 'song') buildAlbums();
 }
-function putSong(s) { return new Promise((res, rej) => { const r = tx('songs', 'readwrite').put(s); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
-function putVideo(v) { return new Promise((res, rej) => { const r = tx('videos', 'readwrite').put(v); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
-function delObj(store, id) { return new Promise((res, rej) => { const r = tx(store, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); }); }
+function putStored(store, value) {
+  if (!state.db) {
+    const list = state.mem[store] || (state.mem[store] = []);
+    const i = list.findIndex((x) => x.id === value.id);
+    if (i >= 0) list[i] = value; else list.push(value);
+    return Promise.resolve();
+  }
+  return new Promise((res, rej) => { const r = tx(store, 'readwrite').put(value); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+}
+function putSong(s) { return putStored('songs', s); }
+function putVideo(v) { return putStored('videos', v); }
+function delObj(store, id) {
+  if (!state.db) {
+    state.mem[store] = (state.mem[store] || []).filter((x) => x.id !== id);
+    return Promise.resolve();
+  }
+  return new Promise((res, rej) => { const r = tx(store, 'readwrite').delete(id); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
+}
 
 // ---------- Álbuns / Artistas ----------
 let albums = [], artists = [];
@@ -1677,9 +1708,7 @@ async function toggleFav(s) {
 }
 
 // ---------- Playlists ----------
-function putPlaylist(p) {
-  return new Promise((res, rej) => { const r = tx('playlists', 'readwrite').put(p); r.onsuccess = () => res(); r.onerror = () => rej(r.error); });
-}
+function putPlaylist(p) { return putStored('playlists', p); }
 function addPlaylist() {
   const list = $('modal');
   list.innerHTML = `<h3>Nova playlist</h3><input type="text" id="pl-name" placeholder="Nome da playlist">
@@ -2627,6 +2656,13 @@ async function delSong(id) {
 // ---------- Remote control (celular via telemetria) ----------
 let phoneTimer = 0;
 function fmtClock(ms) { return fmtTime(ms || 0); }
+function remoteStateAgeMs(ts) {
+  const value = Number(ts);
+  if (!value) return Infinity;
+  const ms = Math.abs(value) < 100000000000 ? value * 1000 : value;
+  const age = Date.now() - ms;
+  return age < -60000 ? Infinity : Math.max(0, age);
+}
 function phoneStatusLine() {
   const p = state.phone;
   const dev = (p.dev || '').slice(0, 8);
@@ -2646,7 +2682,7 @@ async function pollRemote() {
     state.phone.dev = d.dev || '';
     state.phone.state = d.state || null;
     state.phone.songs = d.songs && d.songs.songs ? d.songs.songs : null;
-    state.phone.online = !!(d.state && d.state.ts && Date.now() / 1000 - d.state.ts < 20);
+    state.phone.online = !!(d.state && remoteStateAgeMs(d.state.ts) < 20000);
     state.phone.reason = state.phone.online ? '' : 'celular sem enviar estado';
     renderPhone();
   } catch (e) {
@@ -2672,10 +2708,14 @@ async function pollCloud() {
 }
 async function sendCmd(cmd, value) {
   try {
-    await fetch(REMOTE + '/cmd', {
-      method: 'POST', headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ cmd, value, dev: (state.phone && state.phone.dev) || undefined })
+    const dev = (state.phone && state.phone.dev) || '';
+    const headers = authHeaders({ 'Content-Type': 'application/json' });
+    if (dev) headers['X-Pulsa-Device'] = dev;
+    const r = await fetch(REMOTE + '/cmd', {
+      method: 'POST', headers,
+      body: JSON.stringify({ cmd, value, dev: dev || undefined })
     });
+    if (!r.ok) toast(r.status === 401 ? 'Token do servidor inválido.' : 'O celular recusou o comando (' + r.status + ').');
   } catch (e) { toast('Sem conexão com o servidor do celular.'); }
 }
 let fwdSuppress = false;
@@ -2920,7 +2960,7 @@ async function bootWebSession() {
     const d = await r.json();
     if (d && d.code && d.code !== WEB_CODE) {
       WEB_CODE = d.code;
-      localStorage.setItem('pulsa_web_code', WEB_CODE);
+      storageSet('pulsa_web_code', WEB_CODE);
       WEB_SESSION_ERR = '';
       renderPhone();
       updateTokenBanner();
@@ -2930,7 +2970,7 @@ async function bootWebSession() {
 function promptWebToken() {
   const t = (prompt('Cole o token do servidor:') || '').trim();
   if (!t) return;
-  localStorage.setItem('pulsa_web_token', t);
+  storageSet('pulsa_web_token', t);
   WEB_TOKEN = t;
   WEB_SESSION_ERR = '';
   updateTokenBanner();
@@ -2945,7 +2985,7 @@ function saveBannerToken() {
   const el = $('token-banner-input');
   const t = (el && el.value || '').trim();
   if (!t) { toast('Cole o token do servidor'); return; }
-  localStorage.setItem('pulsa_web_token', t);
+  storageSet('pulsa_web_token', t);
   WEB_TOKEN = t;
   WEB_SESSION_ERR = '';
   updateTokenBanner();
@@ -2978,7 +3018,8 @@ async function webPushState() {
     current: state.current ? webCurrentTrack() : null,
     positionMs: Math.round(((el && el.src ? el.currentTime : 0) || 0) * 1000),
     volume: Math.round((audio.volume || 0) * 100),
-    app: 'web'
+    app: 'web',
+    ts: Date.now()
   };
   try {
     await devFetch('/state', {
@@ -3065,7 +3106,10 @@ async function reloadAll() {
 }
 async function init() {
   registerTabs();
-  state.db = await openDB();
+  try { state.db = await openDB(); } catch (e) { state.db = null; }
+  if (TITAN_TV) {
+    try { if (!new URLSearchParams(location.search).get('tab')) selectTab('phone'); } catch (e) {}
+  }
   await reloadAll();
   const favs = await getKV('favs');
   if (favs) state.favs = new Set(favs);
@@ -3098,7 +3142,7 @@ async function init() {
   bootWebSession();
   setInterval(webPushState, 3000);
   setInterval(pollWebCmds, 3000);
-  if (navigator.serviceWorker && navigator.serviceWorker.register) {
+  if (window.isSecureContext && navigator.serviceWorker && navigator.serviceWorker.register) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
   }
   document.addEventListener('pointerdown', function djWelcome() {
@@ -3152,22 +3196,25 @@ function createFab() {
 }
 // ---------- Modo TV (10 pés) ----------
 // Liga por UA de TV, ?tv=1 ou Perfil > Modo TV (localStorage). ?tv=0 desliga.
-var PULSA_TV = (function () {
+var PULSA_TV = false;
+var TITAN_TV = false;
+(function () {
   try {
     var q = new URLSearchParams(location.search);
-    if (q.get('tv') === '0') return false;
-    if (q.get('tv') === '1') return true;
-    var saved = localStorage.getItem('pulsa.tv');
-    if (saved === '1') return true;
-    if (saved === '0') return false;
+    if (q.get('tv') === '0') return;
+    if (q.get('tv') === '1') PULSA_TV = true;
+    var saved = storageGet('pulsa.tv');
+    if (saved === '0') return;
+    if (saved === '1') PULSA_TV = true;
     var ua = navigator.userAgent || '';
-    return /(Tizen|Web0S|webOS|SMART-TV|SmartTV|BRAVIA|AFT[BMN]|Android TV|Google TV|HbbTV|NetCast|Viera|Orsay)/i.test(ua);
-  } catch (e) { return false; }
+    TITAN_TV = /(TitanOS|SmartTvA|TV_NT|NETTV)/i.test(ua);
+    PULSA_TV = PULSA_TV || /(Tizen|Web0S|webOS|SMART-TV|SmartTV|SmartTvA|BRAVIA|AFT[BMN]|Android TV|Google TV|HbbTV|NetCast|Viera|Orsay|TitanOS|WhaleTV|TV_NT|NETTV|OPR\/|CE-HTML|Philips)/i.test(ua);
+  } catch (e) {}
 })();
 if (PULSA_TV) document.body.classList.add('tv');
 
 function toggleTvMode() {
-  try { localStorage.setItem('pulsa.tv', PULSA_TV ? '0' : '1'); } catch (e) {}
+  storageSet('pulsa.tv', PULSA_TV ? '0' : '1');
   location.reload();
 }
 
@@ -3249,13 +3296,82 @@ function tvRestoreFocus(force) {
   if (target) tvFocus(target);
 }
 
+function tvHasLocalMedia() { return !!(state.radioActive || state.current || state.queue.length); }
+function tvTogglePlay() {
+  if (tvHasLocalMedia()) togglePlay();
+  else if (state.phone.online) phonePlay();
+}
+function tvPlay() {
+  if (tvHasLocalMedia()) {
+    var el = webCurrentEl();
+    if (el && el.paused) el.play().catch(() => {});
+  } else if (state.phone.online) sendCmd('play');
+}
+function tvPause() {
+  if (tvHasLocalMedia()) {
+    var el = webCurrentEl();
+    if (el && !el.paused) el.pause();
+  } else if (state.phone.online) sendCmd('pause');
+}
+function tvNext() {
+  if (state.queue.length) next();
+  else if (state.phone.online) phoneNext();
+}
+function tvPrev() {
+  if (state.queue.length) prev();
+  else if (state.phone.online) phonePrev();
+}
+function tvStop() {
+  if (tvHasLocalMedia()) pauseAudio();
+  else if (state.phone.online) sendCmd('pause');
+}
 function tvSeek(delta) {
   try {
     var el = (state.current && state.current.type === 'video') ? video : audio;
-    if (!el || !isFinite(el.duration)) return;
-    el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + delta));
-    toast((delta > 0 ? '+' : '') + delta + 's');
+    if (el && el.src && isFinite(el.duration)) {
+      el.currentTime = Math.max(0, Math.min(el.duration, el.currentTime + delta));
+      toast((delta > 0 ? '+' : '') + delta + 's');
+      return;
+    }
+    if (state.phone.online && state.phone.state && state.phone.state.current) {
+      var position = Number(state.phone.state.positionMs) || 0;
+      var duration = Number(state.phone.state.current.durationMs) || 0;
+      var target = Math.max(0, position + delta * 1000);
+      if (duration) target = Math.min(target, duration);
+      sendCmd('seek', Math.round(target));
+      toast((delta > 0 ? '+' : '') + delta + 's');
+    }
   } catch (e) {}
+}
+function tvConfirmExit() {
+  var list = $('modal');
+  list.innerHTML = '<h3>Sair do Pulsa?</h3><div class="mrow">O Pulsa vai ser fechado nesta TV.</div><div id="modal-actions"><button class="btn secondary" onclick="closeModal()">Continuar</button><button class="btn" onclick="tvExitApp()">Sair</button></div>';
+  $('modal-wrap').classList.add('show');
+}
+function tvExitApp() {
+  closeModal();
+  try { window.close(); } catch (e) {}
+  setTimeout(function () { try { history.back(); } catch (e) {} }, 100);
+}
+var TV_KEYCODES = {
+  8: 'GoBack', 13: 'Enter', 19: 'MediaPause', 32: ' ', 33: 'PageUp', 34: 'PageDown',
+  37: 'ArrowLeft', 38: 'ArrowUp', 39: 'ArrowRight', 40: 'ArrowDown',
+  179: 'MediaPlayPause', 412: 'MediaRewind', 413: 'MediaStop', 415: 'MediaPlay',
+  417: 'MediaFastForward', 461: 'GoBack'
+};
+var GENERIC_TV_KEYCODES = {
+  8: 'GoBack', 13: 'Enter', 32: ' ', 37: 'ArrowLeft', 38: 'ArrowUp',
+  39: 'ArrowRight', 40: 'ArrowDown'
+};
+function tvEventKey(e, isField) {
+  var raw = e.key || '';
+  var code = e.keyCode || e.which || 0;
+  if (TITAN_TV) {
+    if (code === 8 && isField && raw === 'Backspace') return raw;
+    if (TV_KEYCODES[code]) return TV_KEYCODES[code];
+  }
+  if (!raw && GENERIC_TV_KEYCODES[code]) return GENERIC_TV_KEYCODES[code];
+  return raw;
 }
 
 if (PULSA_TV) {
@@ -3281,37 +3397,40 @@ if (PULSA_TV) {
     var isRange = tag === 'input' && t.type === 'range';
     var modalOpen = document.getElementById('modal-wrap').classList.contains('show');
     var playerOpen = document.getElementById('player').classList.contains('show');
+    var key = tvEventKey(e, isField);
 
-    if (e.key === 'Escape' || (e.key === 'Backspace' && !isField) || e.key === 'GoBack' || e.key === 'BrowserBack') {
+    if (key === 'Escape' || key === 'GoBack' || key === 'BrowserBack' || (key === 'Backspace' && !isField)) {
       if (modalOpen) { e.preventDefault(); closeModal(); return; }
       if (playerOpen) { e.preventDefault(); closePlayer(); return; }
       if (document.getElementById('back').classList.contains('show')) { e.preventDefault(); goBack(); return; }
-      if (e.key === 'Escape' && isField) { e.preventDefault(); t.blur(); }
+      if (isField && (key === 'Escape' || key === 'GoBack')) { e.preventDefault(); t.blur(); return; }
+      if (TITAN_TV && key === 'GoBack') { e.preventDefault(); tvConfirmExit(); return; }
       return;
     }
     if (isField && !isRange) {
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      if (key === 'ArrowDown' || key === 'ArrowUp') {
         e.preventDefault();
-        tvMove(e.key === 'ArrowDown' ? 'down' : 'up');
+        tvMove(key === 'ArrowDown' ? 'down' : 'up');
       }
       return;
     }
     if (isRange) {
-      if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') {
         e.preventDefault();
-        tvMove(e.key === 'ArrowUp' ? 'up' : 'down');
-      } else if (t.id === 'seek' && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        tvMove(key === 'ArrowUp' || key === 'PageUp' ? 'up' : 'down');
+      } else if (t.id === 'seek' && (key === 'ArrowLeft' || key === 'ArrowRight')) {
         e.preventDefault();
-        tvSeek(e.key === 'ArrowLeft' ? -10 : 10);
+        tvSeek(key === 'ArrowLeft' ? -10 : 10);
       }
       return;
     }
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+    if (key === 'ArrowLeft' || key === 'ArrowRight' || key === 'ArrowUp' || key === 'ArrowDown' || key === 'PageUp' || key === 'PageDown') {
       e.preventDefault();
-      tvMove({ ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' }[e.key]);
+      var direction = key === 'ArrowLeft' ? 'left' : key === 'ArrowRight' ? 'right' : key === 'ArrowUp' || key === 'PageUp' ? 'up' : 'down';
+      tvMove(direction);
       return;
     }
-    if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+    if (key === 'Enter' || key === ' ' || key === 'Spacebar') {
       var el = document.activeElement;
       if (!el || el === document.body) return;
       if (el.tagName === 'BUTTON' || el.tagName === 'A' || el.tagName === 'INPUT' || el.tagName === 'SELECT') return;
@@ -3320,15 +3439,16 @@ if (PULSA_TV) {
       return;
     }
     var media = {
-      MediaPlayPause: function () { if (typeof togglePlay === 'function') togglePlay(); },
-      MediaPlay: function () { if (typeof audio !== 'undefined' && audio.paused && typeof togglePlay === 'function') togglePlay(); },
-      MediaPause: function () { if (typeof audio !== 'undefined' && !audio.paused && typeof togglePlay === 'function') togglePlay(); },
-      MediaTrackNext: function () { if (typeof next === 'function') next(); },
-      MediaTrackPrevious: function () { if (typeof prev === 'function') prev(); },
+      MediaPlayPause: tvTogglePlay,
+      MediaPlay: tvPlay,
+      MediaPause: tvPause,
+      MediaTrackNext: tvNext,
+      MediaTrackPrevious: tvPrev,
       MediaFastForward: function () { tvSeek(10); },
-      MediaRewind: function () { tvSeek(-10); }
+      MediaRewind: function () { tvSeek(-10); },
+      MediaStop: tvStop
     };
-    if (media[e.key]) { e.preventDefault(); media[e.key](); }
+    if (media[key]) { e.preventDefault(); media[key](); }
   });
 
   // Ao abrir/fechar player ou modal, o foco precisa entrar no painel novo.
