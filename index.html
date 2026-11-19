@@ -3274,8 +3274,21 @@ function tvMove(dir) {
   if (best) tvFocus(best);
 }
 
-function tvFirstIn(root) {
+function tvIsField(el) {
+  var tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select';
+}
+function tvFirstIn(root, preferAction) {
   var list = tvFocusables().filter(function (el) { return root && root.contains(el); });
+  var clickable = list.filter(function (el) {
+    var tag = (el.tagName || '').toLowerCase();
+    return tag === 'button' || tag === 'a' || el.hasAttribute('onclick');
+  });
+  if (clickable.length) return clickable[0];
+  if (preferAction) {
+    var actions = list.filter(function (el) { return !tvIsField(el); });
+    return actions.length ? actions[0] : null;
+  }
   return list[0] || null;
 }
 
@@ -3285,12 +3298,12 @@ function tvRestoreFocus(force) {
   if (!force && active && active !== document.body && active.isConnected) return;
   var target = null;
   if (document.getElementById('modal-wrap').classList.contains('show')) {
-    target = tvFirstIn(document.getElementById('modal'));
+    target = tvFirstIn(document.getElementById('modal'), false);
   } else if (document.getElementById('player').classList.contains('show')) {
     target = document.getElementById('p-play') || tvFirstIn(document.getElementById('player'));
   } else {
     var tab = document.querySelector('.tab.active');
-    target = tab ? tvFirstIn(tab) : null;
+    target = tab ? tvFirstIn(tab, true) : null;
     if (!target) target = document.querySelector('nav button.active') || document.querySelector('nav button');
   }
   if (target) tvFocus(target);
@@ -3350,8 +3363,11 @@ function tvConfirmExit() {
 }
 function tvExitApp() {
   closeModal();
-  try { window.close(); } catch (e) {}
-  setTimeout(function () { try { history.back(); } catch (e) {} }, 100);
+  if (typeof SmartTvA_API !== 'undefined' && SmartTvA_API && typeof SmartTvA_API.exit === 'function') {
+    SmartTvA_API.exit();
+  } else {
+    try { window.close(); } catch (e) {}
+  }
 }
 var TV_KEYCODES = {
   8: 'GoBack', 13: 'Enter', 19: 'MediaPause', 32: ' ', 33: 'PageUp', 34: 'PageDown',

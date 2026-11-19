@@ -1,5 +1,5 @@
-const CACHE = 'pulsa-web-v6';
-const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './version'];
+const CACHE = 'pulsa-web-v7';
+const ASSETS = ['./', './index.html', './manifest.json', './icon.svg', './icon-512.png', './version'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));

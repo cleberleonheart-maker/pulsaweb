@@ -1,0 +1,52 @@
+{
+  "platform": "Titan OS",
+  "app": {
+    "name": "Pulsa Web",
+    "shortDescription": "Controle o Pulsa Android na TV",
+    "description": "Pulsa Web é a segunda tela do Pulsa Android para TVs Philips com Titan OS. Navegue pela biblioteca do celular, controle play, pausa, próxima faixa, volume e busca usando apenas o controle remoto da TV.",
+    "category": "Music",
+    "languages": [
+      "pt-BR",
+      "en",
+      "es"
+    ],
+    "contactEmail": "cleberleonheart@gmail.com"
+  },
+  "urls": {
+    "testUrl": "https://cleberleonheart-maker.github.io/pulsaweb/?tv=1",
+    "productionUrl": "https://cleberleonheart-maker.github.io/pulsaweb/?tv=1",
+    "privacyPolicy": "https://cleberleonheart-maker.github.io/pulsaweb/privacidade.html"
+  },
+  "authentication": {
+    "required": true,
+    "type": "Token do servidor Pulsa",
+    "qaInstructions": "Informe o token vigente no campo de credenciais do Partner Portal. Não salve o token em arquivos versionados."
+  },
+  "assets": {
+    "mainIcon": "main-icon.jpg",
+    "storeIcon": "store-icon.png",
+    "logo": "logo.png",
+    "background": "background.png",
+    "screenshots": [
+      "screenshot-1.png",
+      "screenshot-2.png"
+    ]
+  },
+  "technical": {
+    "runtime": "HTML5 Chromium",
+    "orientation": "landscape",
+    "recommendedResolution": "1920x1080",
+    "requiresDrm": false,
+    "requiresGeoblocking": false,
+    "serviceWorker": true,
+    "remoteControlKeyCodes": {
+      "back": [
+        8,
+        461
+      ],
+      "playPause": 179,
+      "fastForward": 417,
+      "rewind": 412
+    }
+  }
+}
